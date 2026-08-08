@@ -17,7 +17,8 @@ import type {
   TransactionType,
 } from "@/lib/types";
 import { deriveHoldings, validateSell } from "@/lib/portfolio";
-import { getQuote } from "@/lib/stock-api";
+import { getFxRateToKRW, getQuote } from "@/lib/stock-api";
+import { BASE_CURRENCY, normalizeCurrency, toKRW } from "@/lib/currency";
 
 const TRANSACTIONS_KEY = "stock-transactions";
 const LEGACY_HOLDINGS_KEY = "stock-portfolio";
@@ -30,6 +31,8 @@ interface AddTransactionInput {
   quantity: number;
   price: number;
   fee?: number;
+  currency: string;
+  fxRateToKRW: number;
 }
 
 interface PortfolioContextValue {
@@ -63,6 +66,7 @@ function loadTransactions(): Transaction[] {
       quantity: h.quantity,
       price: h.avgCost,
       fee: 0,
+      currency: h.currency,
       createdAt: h.addedAt,
     }));
 
@@ -78,26 +82,92 @@ function saveTransactions(transactions: Transaction[]) {
   localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 }
 
+async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Transaction[]> {
+  const currencyPromises = new Map<string, Promise<string>>();
+  const fxPromises = new Map<string, Promise<number>>();
+
+  const getCurrency = (symbol: string) => {
+    let promise = currencyPromises.get(symbol);
+    if (!promise) {
+      promise = getQuote(symbol).then((quote) => quote.currency);
+      currencyPromises.set(symbol, promise);
+    }
+    return promise;
+  };
+
+  const getHistoricalFx = (currency: string, date: string) => {
+    const key = `${currency}:${date}`;
+    let promise = fxPromises.get(key);
+    if (!promise) {
+      promise = getFxRateToKRW(currency, date);
+      fxPromises.set(key, promise);
+    }
+    return promise;
+  };
+
+  return Promise.all(
+    transactions.map(async (tx) => {
+      if (tx.currency && tx.fxRateToKRW != null) return tx;
+
+      try {
+        const currency = tx.currency ?? (await getCurrency(tx.symbol));
+        const fxRateToKRW = tx.fxRateToKRW ?? (await getHistoricalFx(currency, tx.date));
+        return { ...tx, currency, fxRateToKRW };
+      } catch {
+        return tx;
+      }
+    })
+  );
+}
+
 function buildSummary(
   holdings: Holding[],
-  quotes: Record<string, StockQuote>
+  quotes: Record<string, StockQuote>,
+  fxRatesToKRW: Record<string, number>
 ): PortfolioSummary {
   const enriched: HoldingWithQuote[] = holdings.map((h) => {
     const quote = quotes[h.symbol];
+    const currency = quote?.currency ?? h.currency ?? "USD";
+    const normalizedCurrency = normalizeCurrency(currency);
+    const fxRate =
+      normalizedCurrency === BASE_CURRENCY
+        ? 1
+        : fxRatesToKRW[normalizedCurrency] ?? 0;
+
     const marketValue = quote ? quote.price * h.quantity : 0;
     const costBasis = h.avgCost * h.quantity;
     const gainLoss = marketValue - costBasis;
     const gainLossPercent = costBasis > 0 ? (gainLoss / costBasis) * 100 : 0;
 
-    return { ...h, quote, marketValue, costBasis, gainLoss, gainLossPercent };
+    const marketValueKRW = fxRate > 0 ? toKRW(marketValue, currency, fxRate) : 0;
+    const resolvedCostBasisKRW =
+      h.costBasisKRW ?? (fxRate > 0 ? toKRW(costBasis, currency, fxRate) : 0);
+    const gainLossKRW = marketValueKRW - resolvedCostBasisKRW;
+    const gainLossPercentKRW =
+      resolvedCostBasisKRW > 0 ? (gainLossKRW / resolvedCostBasisKRW) * 100 : 0;
+
+    return {
+      ...h,
+      currency,
+      quote,
+      marketValue,
+      costBasis,
+      gainLoss,
+      gainLossPercent,
+      marketValueKRW,
+      resolvedCostBasisKRW,
+      gainLossKRW,
+      gainLossPercentKRW,
+    };
   });
 
-  const totalValue = enriched.reduce((s, h) => s + h.marketValue, 0);
-  const totalCost = enriched.reduce((s, h) => s + h.costBasis, 0);
+  const totalValue = enriched.reduce((s, h) => s + h.marketValueKRW, 0);
+  const totalCost = enriched.reduce((s, h) => s + h.resolvedCostBasisKRW, 0);
   const totalGainLoss = totalValue - totalCost;
   const totalGainLossPercent = totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
 
   return {
+    baseCurrency: BASE_CURRENCY,
     totalValue,
     totalCost,
     totalGainLoss,
@@ -109,14 +179,27 @@ function buildSummary(
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
+  const [fxRatesToKRW, setFxRatesToKRW] = useState<Record<string, number>>({ KRW: 1 });
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   const holdings = useMemo(() => deriveHoldings(transactions), [transactions]);
 
   useEffect(() => {
-    setTransactions(loadTransactions());
+    const loaded = loadTransactions();
+    setTransactions(loaded);
     setHydrated(true);
+
+    if (loaded.some((tx) => !tx.currency || tx.fxRateToKRW == null)) {
+      enrichLegacyCurrencies(loaded).then((enriched) => {
+        const changed = enriched.some(
+          (tx, i) =>
+            tx.currency !== loaded[i]?.currency ||
+            tx.fxRateToKRW !== loaded[i]?.fxRateToKRW
+        );
+        if (changed) setTransactions(enriched);
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -126,6 +209,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const refreshQuotes = useCallback(async () => {
     if (holdings.length === 0) {
       setQuotes({});
+      setFxRatesToKRW({ KRW: 1 });
       return;
     }
 
@@ -142,6 +226,26 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         }
       });
       setQuotes(newQuotes);
+
+      const currencies = Array.from(
+        new Set(
+          Object.values(newQuotes)
+            .map((quote) => normalizeCurrency(quote.currency))
+            .filter((currency) => currency !== BASE_CURRENCY)
+        )
+      );
+
+      const fxResults = await Promise.allSettled(
+        currencies.map(async (currency) => [currency, await getFxRateToKRW(currency)] as const)
+      );
+      const nextFxRates: Record<string, number> = { KRW: 1 };
+      fxResults.forEach((result) => {
+        if (result.status === "fulfilled") {
+          const [currency, rate] = result.value;
+          nextFxRates[currency] = rate;
+        }
+      });
+      setFxRatesToKRW(nextFxRates);
     } finally {
       setLoading(false);
     }
@@ -149,9 +253,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (hydrated && holdings.length > 0) {
-      refreshQuotes();
+      void refreshQuotes();
     }
-  }, [hydrated, holdings.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hydrated, refreshQuotes, holdings.length]);
 
   const addTransaction = useCallback(
     (input: AddTransactionInput): string | null => {
@@ -172,6 +276,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         quantity: input.quantity,
         price: input.price,
         fee,
+        currency: input.currency,
+        fxRateToKRW: input.fxRateToKRW,
         createdAt: new Date().toISOString(),
       };
 
@@ -186,8 +292,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const summary = useMemo(
-    () => (holdings.length > 0 ? buildSummary(holdings, quotes) : null),
-    [holdings, quotes]
+    () =>
+      holdings.length > 0
+        ? buildSummary(holdings, quotes, fxRatesToKRW)
+        : null,
+    [holdings, quotes, fxRatesToKRW]
   );
 
   return (

@@ -1,9 +1,10 @@
 import { cn } from "@/lib/utils";
-import { formatPercent } from "@/lib/format";
+import { formatCurrency, formatPercent } from "@/lib/format";
 
 interface PriceChangeProps {
   value: number;
   percent?: number;
+  currency?: string;
   size?: "sm" | "md" | "lg";
   showPercent?: boolean;
   className?: string;
@@ -12,12 +13,16 @@ interface PriceChangeProps {
 export function PriceChange({
   value,
   percent,
+  currency,
   size = "md",
   showPercent = true,
   className,
 }: PriceChangeProps) {
   const isPositive = value >= 0;
   const sizeClass = { sm: "text-sm", md: "text-base", lg: "text-lg font-semibold" }[size];
+  const amount = currency
+    ? formatCurrency(Math.abs(value), currency)
+    : Math.abs(value).toFixed(2);
 
   return (
     <span
@@ -27,8 +32,8 @@ export function PriceChange({
         className
       )}
     >
-      {isPositive ? "+" : ""}
-      {value.toFixed(2)}
+      {isPositive ? "+" : "-"}
+      {amount}
       {showPercent && percent !== undefined && (
         <span className="ml-1 opacity-80">({formatPercent(percent)})</span>
       )}

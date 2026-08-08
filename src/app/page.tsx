@@ -55,7 +55,7 @@ export default function DashboardPage() {
                 {summary.holdings.map((h) => {
                   const pct =
                     summary.totalValue > 0
-                      ? (h.marketValue / summary.totalValue) * 100
+                      ? (h.marketValueKRW / summary.totalValue) * 100
                       : 0;
                   return (
                     <div key={h.id} className="flex items-center justify-between text-sm">

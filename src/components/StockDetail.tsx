@@ -65,6 +65,7 @@ export function StockDetail({ symbol }: StockDetailProps) {
             <PriceChange
               value={quote.change}
               percent={quote.changePercent}
+              currency={quote.currency}
               size="lg"
             />
           </div>
@@ -90,7 +91,7 @@ export function StockDetail({ symbol }: StockDetailProps) {
         ))}
       </div>
 
-      <StockChart symbol={symbol} />
+      <StockChart symbol={symbol} currency={quote.currency} />
     </div>
   );
 }
