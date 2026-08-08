@@ -8,8 +8,14 @@ import { TransactionList } from "@/components/TransactionList";
 import { usePortfolio } from "@/hooks/usePortfolio";
 
 export default function PortfolioPage() {
-  const { summary, transactions, loading, removeTransaction, refreshQuotes } =
-    usePortfolio();
+  const {
+    summary,
+    transactions,
+    loading,
+    removeTransaction,
+    refreshQuotes,
+    displayCurrency,
+  } = usePortfolio();
 
   return (
     <div className="space-y-8">
@@ -40,7 +46,11 @@ export default function PortfolioPage() {
 
       <div>
         <h2 className="mb-4 text-lg font-semibold text-white">보유 종목</h2>
-        <HoldingsTable holdings={summary?.holdings ?? []} loading={loading} />
+        <HoldingsTable
+          holdings={summary?.holdings ?? []}
+          displayCurrency={displayCurrency}
+          loading={loading}
+        />
       </div>
 
       <div>
