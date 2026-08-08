@@ -17,6 +17,7 @@ import type {
   Transaction,
   TransactionType,
 } from "@/lib/types";
+import { useAuth } from "@/hooks/useAuth";
 import { deriveHoldings, validateSell } from "@/lib/portfolio";
 import { getFxRateToKRW, getQuote } from "@/lib/stock-api";
 import {
@@ -58,13 +59,36 @@ interface PortfolioContextValue {
 
 const PortfolioContext = createContext<PortfolioContextValue | null>(null);
 
-function loadTransactions(): Transaction[] {
+function scopedKey(baseKey: string, userId?: string | null): string {
+  return userId ? `${baseKey}:${userId}` : baseKey;
+}
+
+function loadTransactions(userId?: string | null): Transaction[] {
   if (typeof window === "undefined") return [];
+
   try {
-    const raw = localStorage.getItem(TRANSACTIONS_KEY);
+    const transactionKey = scopedKey(TRANSACTIONS_KEY, userId);
+    const raw = localStorage.getItem(transactionKey);
     if (raw) return JSON.parse(raw);
 
-    const legacy = localStorage.getItem(LEGACY_HOLDINGS_KEY);
+    // 로그인 도입 전 기존 데이터는 첫 로그인 계정으로 한 번만 이전합니다.
+    if (userId) {
+      const unscopedTransactions = localStorage.getItem(TRANSACTIONS_KEY);
+      if (unscopedTransactions) {
+        localStorage.setItem(transactionKey, unscopedTransactions);
+        localStorage.removeItem(TRANSACTIONS_KEY);
+        return JSON.parse(unscopedTransactions);
+      }
+    }
+
+    const legacyKey = scopedKey(LEGACY_HOLDINGS_KEY, userId);
+    let legacy = localStorage.getItem(legacyKey);
+
+    if (!legacy && userId) {
+      legacy = localStorage.getItem(LEGACY_HOLDINGS_KEY);
+      if (legacy) localStorage.removeItem(LEGACY_HOLDINGS_KEY);
+    }
+
     if (!legacy) return [];
 
     const holdings: Holding[] = JSON.parse(legacy);
@@ -81,16 +105,22 @@ function loadTransactions(): Transaction[] {
       createdAt: h.addedAt,
     }));
 
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(migrated));
-    localStorage.removeItem(LEGACY_HOLDINGS_KEY);
+    localStorage.setItem(transactionKey, JSON.stringify(migrated));
+    localStorage.removeItem(legacyKey);
     return migrated;
   } catch {
     return [];
   }
 }
 
-function saveTransactions(transactions: Transaction[]) {
-  localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+function saveTransactions(
+  transactions: Transaction[],
+  userId?: string | null
+) {
+  localStorage.setItem(
+    scopedKey(TRANSACTIONS_KEY, userId),
+    JSON.stringify(transactions)
+  );
 }
 
 async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Transaction[]> {
@@ -229,6 +259,9 @@ function buildSummary(
 }
 
 export function PortfolioProvider({ children }: { children: React.ReactNode }) {
+  const { user, configured: authConfigured } = useAuth();
+  const storageUserId = authConfigured ? user?.id ?? null : null;
+
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
   const [fxRatesToKRW, setFxRatesToKRW] = useState<Record<string, number>>({ KRW: 1 });
@@ -240,12 +273,29 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const holdings = useMemo(() => deriveHoldings(transactions), [transactions]);
 
   useEffect(() => {
-    const storedDisplayCurrency = localStorage.getItem(DISPLAY_CURRENCY_KEY);
-    if (storedDisplayCurrency === "KRW" || storedDisplayCurrency === "USD") {
-      setDisplayCurrencyState(storedDisplayCurrency);
+    setHydrated(false);
+    setTransactions([]);
+    setQuotes({});
+    setFxRatesToKRW({ KRW: 1 });
+
+    const displayKey = scopedKey(DISPLAY_CURRENCY_KEY, storageUserId);
+    let storedDisplayCurrency = localStorage.getItem(displayKey);
+
+    if (!storedDisplayCurrency && storageUserId) {
+      storedDisplayCurrency = localStorage.getItem(DISPLAY_CURRENCY_KEY);
+      if (storedDisplayCurrency) {
+        localStorage.setItem(displayKey, storedDisplayCurrency);
+        localStorage.removeItem(DISPLAY_CURRENCY_KEY);
+      }
     }
 
-    const loaded = loadTransactions();
+    if (storedDisplayCurrency === "KRW" || storedDisplayCurrency === "USD") {
+      setDisplayCurrencyState(storedDisplayCurrency);
+    } else {
+      setDisplayCurrencyState(DEFAULT_DISPLAY_CURRENCY);
+    }
+
+    const loaded = loadTransactions(storageUserId);
     setTransactions(loaded);
     setHydrated(true);
 
@@ -267,16 +317,22 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         if (changed) setTransactions(enriched);
       });
     }
-  }, []);
+  }, [storageUserId]);
 
   useEffect(() => {
-    if (hydrated) saveTransactions(transactions);
-  }, [transactions, hydrated]);
+    if (hydrated) saveTransactions(transactions, storageUserId);
+  }, [transactions, hydrated, storageUserId]);
 
-  const setDisplayCurrency = useCallback((currency: DisplayCurrency) => {
-    setDisplayCurrencyState(currency);
-    localStorage.setItem(DISPLAY_CURRENCY_KEY, currency);
-  }, []);
+  const setDisplayCurrency = useCallback(
+    (currency: DisplayCurrency) => {
+      setDisplayCurrencyState(currency);
+      localStorage.setItem(
+        scopedKey(DISPLAY_CURRENCY_KEY, storageUserId),
+        currency
+      );
+    },
+    [storageUserId]
+  );
 
   const refreshQuotes = useCallback(async () => {
     if (holdings.length === 0) {
