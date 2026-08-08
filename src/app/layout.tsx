@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AuthGate } from "@/components/AuthGate";
 import { Header } from "@/components/Header";
+import { AuthProvider } from "@/hooks/useAuth";
 import { PortfolioProvider } from "@/hooks/usePortfolio";
 import "./globals.css";
 
@@ -29,13 +31,19 @@ export default function RootLayout({
       lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
-        <PortfolioProvider>
-          <Header />
-          <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
-            {children}
-          </main>
-        </PortfolioProvider>
+      <body className="min-h-full bg-slate-950 text-slate-100">
+        <AuthProvider>
+          <AuthGate>
+            <PortfolioProvider>
+              <div className="flex min-h-screen flex-col">
+                <Header />
+                <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">
+                  {children}
+                </main>
+              </div>
+            </PortfolioProvider>
+          </AuthGate>
+        </AuthProvider>
       </body>
     </html>
   );
