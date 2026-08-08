@@ -1,4 +1,5 @@
 export type TransactionType = "buy" | "sell";
+export type DisplayCurrency = "KRW" | "USD";
 
 export interface Transaction {
   id: string;
@@ -11,6 +12,7 @@ export interface Transaction {
   fee: number;
   currency?: string;
   fxRateToKRW?: number;
+  usdKrwRateAtTransaction?: number;
   createdAt: string;
 }
 
@@ -22,6 +24,7 @@ export interface Holding {
   avgCost: number;
   currency?: string;
   costBasisKRW?: number;
+  costBasisUSD?: number;
   addedAt: string;
 }
 
@@ -72,10 +75,18 @@ export interface HoldingWithQuote extends Holding {
   resolvedCostBasisKRW: number;
   gainLossKRW: number;
   gainLossPercentKRW: number;
+  marketValueUSD: number;
+  resolvedCostBasisUSD: number;
+  gainLossUSD: number;
+  gainLossPercentUSD: number;
+  displayMarketValue: number;
+  displayCostBasis: number;
+  displayGainLoss: number;
+  displayGainLossPercent: number;
 }
 
 export interface PortfolioSummary {
-  baseCurrency: "KRW";
+  baseCurrency: DisplayCurrency;
   totalValue: number;
   totalCost: number;
   totalGainLoss: number;
