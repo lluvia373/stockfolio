@@ -1,5 +1,5 @@
 import type { ChartPoint, DayOHLC, StockQuote, StockSearchResult } from "./types";
-import { BASE_CURRENCY, currencyUnitScale, normalizeCurrency } from "./currency";
+import { BASE_CURRENCY, normalizeCurrency } from "./currency";
 
 export async function searchStocks(query: string): Promise<StockSearchResult[]> {
   const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
@@ -34,14 +34,10 @@ export async function getHistoricalDay(symbol: string, date: string): Promise<Da
 
 export async function getFxRateToKRW(currency: string, date?: string): Promise<number> {
   const normalized = normalizeCurrency(currency);
-  const scale = currencyUnitScale(currency);
-
-  if (normalized === BASE_CURRENCY) return scale;
+  if (normalized === BASE_CURRENCY) return 1;
 
   const pair = `${normalized}${BASE_CURRENCY}=X`;
-  const rawRate = date
+  return date
     ? (await getHistoricalDay(pair, date)).close
     : (await getQuote(pair)).price;
-
-  return rawRate * scale;
 }
