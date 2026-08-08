@@ -8,7 +8,7 @@ import { AllocationChart } from "@/components/AllocationChart";
 import { usePortfolio } from "@/hooks/usePortfolio";
 
 export default function DashboardPage() {
-  const { summary, loading, refreshQuotes } = usePortfolio();
+  const { summary, loading, refreshQuotes, displayCurrency } = usePortfolio();
 
   return (
     <div className="space-y-8">
@@ -42,6 +42,7 @@ export default function DashboardPage() {
           </div>
           <HoldingsTable
             holdings={summary?.holdings ?? []}
+            displayCurrency={displayCurrency}
             loading={loading}
           />
         </div>
@@ -49,13 +50,16 @@ export default function DashboardPage() {
         <div>
           <h2 className="mb-4 text-lg font-semibold text-white">자산 배분</h2>
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
-            <AllocationChart holdings={summary?.holdings ?? []} />
+            <AllocationChart
+              holdings={summary?.holdings ?? []}
+              displayCurrency={displayCurrency}
+            />
             {summary && summary.holdings.length > 0 && (
               <div className="mt-4 space-y-2">
                 {summary.holdings.map((h) => {
                   const pct =
                     summary.totalValue > 0
-                      ? (h.marketValueKRW / summary.totalValue) * 100
+                      ? (h.displayMarketValue / summary.totalValue) * 100
                       : 0;
                   return (
                     <div key={h.id} className="flex items-center justify-between text-sm">
