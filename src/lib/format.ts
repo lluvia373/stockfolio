@@ -1,10 +1,15 @@
+import { currencyUnitScale, normalizeCurrency } from "./currency";
+
 export function formatCurrency(value: number, currency = "USD"): string {
+  const normalized = normalizeCurrency(currency);
+  const displayValue = value * currencyUnitScale(currency);
+
   return new Intl.NumberFormat("ko-KR", {
     style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+    currency: normalized,
+    minimumFractionDigits: normalized === "KRW" ? 0 : 2,
+    maximumFractionDigits: normalized === "KRW" ? 0 : 2,
+  }).format(displayValue);
 }
 
 export function formatNumber(value: number): string {
