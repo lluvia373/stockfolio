@@ -23,6 +23,7 @@ export function TransactionForm() {
   const [date, setDate] = useState(todayISO());
   const [ohlc, setOhlc] = useState<DayOHLC | null>(null);
   const [fxRateToKRW, setFxRateToKRW] = useState<number | null>(null);
+  const [usdKrwRateAtTransaction, setUsdKrwRateAtTransaction] = useState<number | null>(null);
   const [ohlcLoading, setOhlcLoading] = useState(false);
   const [ohlcError, setOhlcError] = useState<string | null>(null);
   const [price, setPrice] = useState<number>(0);
@@ -60,6 +61,7 @@ export function TransactionForm() {
     if (!selected || !date) {
       setOhlc(null);
       setFxRateToKRW(null);
+      setUsdKrwRateAtTransaction(null);
       return;
     }
 
@@ -67,19 +69,25 @@ export function TransactionForm() {
     setOhlcLoading(true);
     setOhlcError(null);
     setFxRateToKRW(null);
+    setUsdKrwRateAtTransaction(null);
 
     getHistoricalDay(selected.symbol, date)
       .then(async (data) => {
-        const fxRate = await getFxRateToKRW(data.currency, date);
+        const [fxRate, usdKrwRate] = await Promise.all([
+          getFxRateToKRW(data.currency, date),
+          getFxRateToKRW("USD", date),
+        ]);
         if (cancelled) return;
         setOhlc(data);
         setFxRateToKRW(fxRate);
+        setUsdKrwRateAtTransaction(usdKrwRate);
         setPrice(Math.round(data.close * 100) / 100);
       })
       .catch((err: Error) => {
         if (cancelled) return;
         setOhlc(null);
         setFxRateToKRW(null);
+        setUsdKrwRateAtTransaction(null);
         setOhlcError(err.message || "거래일 시세 또는 환율을 불러올 수 없습니다.");
       })
       .finally(() => {
@@ -93,7 +101,16 @@ export function TransactionForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected || !ohlc || fxRateToKRW == null || !quantity || price <= 0) return;
+    if (
+      !selected ||
+      !ohlc ||
+      fxRateToKRW == null ||
+      usdKrwRateAtTransaction == null ||
+      !quantity ||
+      price <= 0
+    ) {
+      return;
+    }
 
     const qty = parseFloat(quantity);
     if (Number.isNaN(qty) || qty <= 0) {
@@ -111,6 +128,7 @@ export function TransactionForm() {
       fee: fee ? parseFloat(fee) : 0,
       currency: ohlc.currency,
       fxRateToKRW,
+      usdKrwRateAtTransaction,
     });
 
     if (err) {
@@ -249,10 +267,13 @@ export function TransactionForm() {
             {ohlc && !ohlcLoading && (
               <>
                 <PriceRangePicker ohlc={ohlc} price={price} onChange={setPrice} />
-                {fxRateToKRW != null && (
-                  <p className="text-xs text-slate-500">
-                    거래 통화 {ohlc.currency} · 원화 환산 {formatCurrency(fxRateToKRW, "KRW")} / 표시 단위
-                  </p>
+                {fxRateToKRW != null && usdKrwRateAtTransaction != null && (
+                  <div className="space-y-1 text-xs text-slate-500">
+                    <p>거래 통화: {ohlc.currency}</p>
+                    <p>
+                      거래일 환율: $1 = {formatCurrency(usdKrwRateAtTransaction, "KRW")}
+                    </p>
+                  </div>
                 )}
               </>
             )}
@@ -304,7 +325,12 @@ export function TransactionForm() {
 
             <button
               type="submit"
-              disabled={!ohlc || fxRateToKRW == null || ohlcLoading}
+              disabled={
+                !ohlc ||
+                fxRateToKRW == null ||
+                usdKrwRateAtTransaction == null ||
+                ohlcLoading
+              }
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3 font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
