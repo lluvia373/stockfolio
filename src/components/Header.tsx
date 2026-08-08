@@ -2,8 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, LayoutDashboard, Search, TrendingUp } from "lucide-react";
+import {
+  BarChart3,
+  LayoutDashboard,
+  LogOut,
+  Search,
+  TrendingUp,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import type { DisplayCurrency } from "@/lib/types";
 
@@ -20,6 +27,7 @@ const currencyOptions: { value: DisplayCurrency; label: string }[] = [
 
 export function Header() {
   const pathname = usePathname();
+  const { user, configured, signOut } = useAuth();
   const { displayCurrency, setDisplayCurrency } = usePortfolio();
 
   return (
@@ -76,6 +84,26 @@ export function Header() {
               );
             })}
           </nav>
+
+          {configured && user && (
+            <div className="ml-1 flex items-center gap-1 border-l border-slate-800 pl-2">
+              <span
+                className="hidden max-w-40 truncate text-xs text-slate-400 xl:inline"
+                title={user.email ?? "Google 계정"}
+              >
+                {user.email ?? "Google 계정"}
+              </span>
+              <button
+                type="button"
+                onClick={() => void signOut()}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+                aria-label="로그아웃"
+                title="로그아웃"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>
