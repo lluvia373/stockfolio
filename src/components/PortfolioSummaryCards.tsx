@@ -2,6 +2,7 @@
 
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { PriceChange } from "@/components/PriceChange";
+import { usePortfolio } from "@/hooks/usePortfolio";
 import type { PortfolioSummary } from "@/lib/types";
 import { DollarSign, PieChart, TrendingUp, Wallet } from "lucide-react";
 
@@ -11,24 +12,26 @@ interface PortfolioSummaryCardsProps {
 }
 
 export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCardsProps) {
-  const baseCurrency = summary?.baseCurrency ?? "KRW";
+  const { displayCurrency } = usePortfolio();
+  const baseCurrency = summary?.baseCurrency ?? displayCurrency;
+  const currencyLabel = baseCurrency === "KRW" ? "원화" : "달러";
   const cards = [
     {
-      label: "총 평가액 (원화)",
+      label: `총 평가액 (${currencyLabel})`,
       value: summary ? formatCurrency(summary.totalValue, baseCurrency) : "—",
       icon: Wallet,
       color: "text-blue-400",
       bg: "bg-blue-500/10",
     },
     {
-      label: "총 매입금액 (원화)",
+      label: `총 매입금액 (${currencyLabel})`,
       value: summary ? formatCurrency(summary.totalCost, baseCurrency) : "—",
       icon: DollarSign,
       color: "text-violet-400",
       bg: "bg-violet-500/10",
     },
     {
-      label: "총 손익 (원화)",
+      label: `총 손익 (${currencyLabel})`,
       value: null,
       icon: TrendingUp,
       color: summary && summary.totalGainLoss >= 0 ? "text-emerald-400" : "text-red-400",
@@ -46,7 +49,7 @@ export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCard
       ),
     },
     {
-      label: "원화 기준 수익률",
+      label: `${currencyLabel} 기준 수익률`,
       value: summary ? formatPercent(summary.totalGainLossPercent) : "—",
       icon: PieChart,
       color: summary && summary.totalGainLossPercent >= 0 ? "text-emerald-400" : "text-red-400",

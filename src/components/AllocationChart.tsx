@@ -2,7 +2,7 @@
 
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatCurrency } from "@/lib/format";
-import type { HoldingWithQuote } from "@/lib/types";
+import type { DisplayCurrency, HoldingWithQuote } from "@/lib/types";
 
 const COLORS = [
   "#34d399", "#60a5fa", "#a78bfa", "#f472b6",
@@ -11,14 +11,15 @@ const COLORS = [
 
 interface AllocationChartProps {
   holdings: HoldingWithQuote[];
+  displayCurrency: DisplayCurrency;
 }
 
-export function AllocationChart({ holdings }: AllocationChartProps) {
+export function AllocationChart({ holdings, displayCurrency }: AllocationChartProps) {
   const data = holdings
-    .filter((h) => h.marketValueKRW > 0)
+    .filter((h) => h.displayMarketValue > 0)
     .map((h) => ({
       name: h.symbol,
-      value: h.marketValueKRW,
+      value: h.displayMarketValue,
     }));
 
   if (data.length === 0) {
@@ -52,7 +53,10 @@ export function AllocationChart({ holdings }: AllocationChartProps) {
             borderRadius: "8px",
             color: "#f1f5f9",
           }}
-          formatter={(value) => [formatCurrency(Number(value), "KRW"), "평가액"]}
+          formatter={(value) => [
+            formatCurrency(Number(value), displayCurrency),
+            "평가액",
+          ]}
         />
       </PieChart>
     </ResponsiveContainer>

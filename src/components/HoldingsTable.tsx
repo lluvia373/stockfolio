@@ -3,16 +3,25 @@
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { normalizeCurrency } from "@/lib/currency";
 import { PriceChange } from "@/components/PriceChange";
-import type { HoldingWithQuote } from "@/lib/types";
+import type { DisplayCurrency, HoldingWithQuote } from "@/lib/types";
 
 interface HoldingsTableProps {
   holdings: HoldingWithQuote[];
+  displayCurrency: DisplayCurrency;
   onRemove?: (id: string) => void;
   loading?: boolean;
 }
 
-export function HoldingsTable({ holdings, onRemove, loading }: HoldingsTableProps) {
+export function HoldingsTable({
+  holdings,
+  displayCurrency,
+  onRemove,
+  loading,
+}: HoldingsTableProps) {
+  const displayLabel = displayCurrency === "KRW" ? "원화" : "달러";
+
   if (holdings.length === 0) {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-12 text-center">
@@ -36,14 +45,19 @@ export function HoldingsTable({ holdings, onRemove, loading }: HoldingsTableProp
               <th className="px-4 py-3 font-medium">종목</th>
               <th className="px-4 py-3 font-medium text-right">수량</th>
               <th className="px-4 py-3 font-medium text-right">현재가</th>
-              <th className="px-4 py-3 font-medium text-right">평가액</th>
-              <th className="px-4 py-3 font-medium text-right">원화 손익</th>
+              <th className="px-4 py-3 font-medium text-right">평가액 ({displayLabel})</th>
+              <th className="px-4 py-3 font-medium text-right">손익 ({displayLabel})</th>
               {onRemove && <th className="px-4 py-3 font-medium text-right">관리</th>}
             </tr>
           </thead>
           <tbody>
             {holdings.map((h) => {
               const currency = h.quote?.currency ?? h.currency ?? "USD";
+              const nativeCurrency = normalizeCurrency(currency);
+              const showNativeSecondary = nativeCurrency !== displayCurrency;
+              const displayPrice =
+                h.quantity > 0 ? h.displayMarketValue / h.quantity : 0;
+
               return (
                 <tr
                   key={h.id}
@@ -69,6 +83,11 @@ export function HoldingsTable({ holdings, onRemove, loading }: HoldingsTableProp
                         <span className="text-white">
                           {formatCurrency(h.quote.price, currency)}
                         </span>
+                        {showNativeSecondary && (
+                          <span className="text-xs text-slate-500">
+                            {formatCurrency(displayPrice, displayCurrency)} /주
+                          </span>
+                        )}
                         <PriceChange
                           value={h.quote.change}
                           percent={h.quote.changePercent}
@@ -83,10 +102,12 @@ export function HoldingsTable({ holdings, onRemove, loading }: HoldingsTableProp
                       "—"
                     ) : (
                       <div className="flex flex-col items-end">
-                        <span>{formatCurrency(h.marketValue, currency)}</span>
-                        <span className="text-xs font-normal text-slate-500">
-                          {formatCurrency(h.marketValueKRW, "KRW")}
-                        </span>
+                        <span>{formatCurrency(h.displayMarketValue, displayCurrency)}</span>
+                        {showNativeSecondary && (
+                          <span className="text-xs font-normal text-slate-500">
+                            현지 {formatCurrency(h.marketValue, currency)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </td>
@@ -95,9 +116,9 @@ export function HoldingsTable({ holdings, onRemove, loading }: HoldingsTableProp
                       <span className="text-slate-600">—</span>
                     ) : (
                       <PriceChange
-                        value={h.gainLossKRW}
-                        percent={h.gainLossPercentKRW}
-                        currency="KRW"
+                        value={h.displayGainLoss}
+                        percent={h.displayGainLossPercent}
+                        currency={displayCurrency}
                         size="sm"
                       />
                     )}
