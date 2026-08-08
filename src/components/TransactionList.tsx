@@ -42,6 +42,7 @@ export function TransactionList({ transactions, onRemove }: TransactionListProps
           <tbody>
             {sorted.map((tx) => {
               const amount = tx.quantity * tx.price + (tx.type === "buy" ? tx.fee : 0);
+              const currency = tx.currency ?? "USD";
               return (
                 <tr
                   key={tx.id}
@@ -51,6 +52,7 @@ export function TransactionList({ transactions, onRemove }: TransactionListProps
                   <td className="px-4 py-3">
                     <span className="font-semibold text-white">{tx.symbol}</span>
                     <span className="ml-2 text-xs text-slate-500">{tx.name}</span>
+                    <span className="ml-2 text-[10px] uppercase text-slate-600">{currency}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -66,10 +68,10 @@ export function TransactionList({ transactions, onRemove }: TransactionListProps
                   </td>
                   <td className="px-4 py-3 text-right text-slate-300">{tx.quantity}</td>
                   <td className="px-4 py-3 text-right text-slate-300">
-                    {formatCurrency(tx.price)}
+                    {formatCurrency(tx.price, currency)}
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-white">
-                    {formatCurrency(amount)}
+                    {formatCurrency(amount, currency)}
                   </td>
                   {onRemove && (
                     <td className="px-4 py-3 text-right">
