@@ -2,6 +2,7 @@
 
 import { formatCurrency, formatPercent } from "@/lib/format";
 import { PriceChange } from "@/components/PriceChange";
+import { usePortfolio } from "@/hooks/usePortfolio";
 import type { PortfolioSummary } from "@/lib/types";
 import { DollarSign, PieChart, TrendingUp, Wallet } from "lucide-react";
 
@@ -11,7 +12,8 @@ interface PortfolioSummaryCardsProps {
 }
 
 export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCardsProps) {
-  const baseCurrency = summary?.baseCurrency ?? "KRW";
+  const { displayCurrency } = usePortfolio();
+  const baseCurrency = summary?.baseCurrency ?? displayCurrency;
   const currencyLabel = baseCurrency === "KRW" ? "원화" : "달러";
   const cards = [
     {
