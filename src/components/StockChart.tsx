@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { getChart } from "@/lib/stock-api";
+import { formatCurrency } from "@/lib/format";
 import type { ChartPoint } from "@/lib/types";
 import { Loader2 } from "lucide-react";
 
@@ -24,9 +25,10 @@ const RANGES = [
 
 interface StockChartProps {
   symbol: string;
+  currency: string;
 }
 
-export function StockChart({ symbol }: StockChartProps) {
+export function StockChart({ symbol, currency }: StockChartProps) {
   const [range, setRange] = useState("6mo");
   const [data, setData] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,7 +103,7 @@ export function StockChart({ symbol }: StockChartProps) {
               domain={["auto", "auto"]}
               axisLine={false}
               tickLine={false}
-              width={60}
+              width={70}
             />
             <Tooltip
               contentStyle={{
@@ -110,7 +112,7 @@ export function StockChart({ symbol }: StockChartProps) {
                 borderRadius: "8px",
                 color: "#f1f5f9",
               }}
-              formatter={(value) => [`$${Number(value).toFixed(2)}`, "종가"]}
+              formatter={(value) => [formatCurrency(Number(value), currency), "종가"]}
             />
             <Area
               type="monotone"
