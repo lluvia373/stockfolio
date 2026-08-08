@@ -1,4 +1,5 @@
 import type { Holding, Transaction } from "./types";
+import { toKRW } from "./currency";
 
 export function deriveHoldings(transactions: Transaction[]): Holding[] {
   const sorted = [...transactions].sort(
@@ -8,22 +9,43 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
 
   const positions = new Map<
     string,
-    { symbol: string; name: string; quantity: number; totalCost: number; firstDate: string }
+    {
+      symbol: string;
+      name: string;
+      quantity: number;
+      totalCost: number;
+      totalCostKRW?: number;
+      currency?: string;
+      firstDate: string;
+    }
   >();
 
   for (const tx of sorted) {
     if (tx.type === "buy") {
       const existing = positions.get(tx.symbol);
       const cost = tx.quantity * tx.price + tx.fee;
+      const costKRW =
+        tx.currency && tx.fxRateToKRW != null
+          ? toKRW(cost, tx.currency, tx.fxRateToKRW)
+          : undefined;
+
       if (existing) {
         existing.quantity += tx.quantity;
         existing.totalCost += cost;
+        existing.currency ??= tx.currency;
+        if (costKRW != null) {
+          existing.totalCostKRW = (existing.totalCostKRW ?? 0) + costKRW;
+        } else {
+          existing.totalCostKRW = undefined;
+        }
       } else {
         positions.set(tx.symbol, {
           symbol: tx.symbol,
           name: tx.name,
           quantity: tx.quantity,
           totalCost: cost,
+          totalCostKRW: costKRW,
+          currency: tx.currency,
           firstDate: tx.date,
         });
       }
@@ -32,8 +54,16 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
       if (!existing || existing.quantity <= 0) continue;
 
       const avgCost = existing.totalCost / existing.quantity;
+      const avgCostKRW =
+        existing.totalCostKRW != null
+          ? existing.totalCostKRW / existing.quantity
+          : undefined;
+
       existing.quantity -= tx.quantity;
       existing.totalCost -= avgCost * tx.quantity;
+      if (avgCostKRW != null && existing.totalCostKRW != null) {
+        existing.totalCostKRW -= avgCostKRW * tx.quantity;
+      }
 
       if (existing.quantity < 1e-8) {
         positions.delete(tx.symbol);
@@ -47,6 +77,8 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
     name: p.name,
     quantity: p.quantity,
     avgCost: p.quantity > 0 ? p.totalCost / p.quantity : 0,
+    currency: p.currency,
+    costBasisKRW: p.totalCostKRW,
     addedAt: p.firstDate,
   }));
 }
