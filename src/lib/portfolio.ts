@@ -15,6 +15,7 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
       quantity: number;
       totalCost: number;
       totalCostKRW?: number;
+      totalCostUSD?: number;
       currency?: string;
       firstDate: string;
     }
@@ -28,15 +29,30 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
         tx.currency && tx.fxRateToKRW != null
           ? toKRW(cost, tx.currency, tx.fxRateToKRW)
           : undefined;
+      const costUSD =
+        costKRW != null && tx.usdKrwRateAtTransaction != null && tx.usdKrwRateAtTransaction > 0
+          ? costKRW / tx.usdKrwRateAtTransaction
+          : undefined;
 
       if (existing) {
         existing.quantity += tx.quantity;
         existing.totalCost += cost;
         existing.currency ??= tx.currency;
-        if (costKRW != null) {
-          existing.totalCostKRW = (existing.totalCostKRW ?? 0) + costKRW;
+
+        if (costKRW != null && existing.totalCostKRW != null) {
+          existing.totalCostKRW += costKRW;
+        } else if (costKRW != null && existing.totalCostKRW == null && existing.quantity === tx.quantity) {
+          existing.totalCostKRW = costKRW;
         } else {
           existing.totalCostKRW = undefined;
+        }
+
+        if (costUSD != null && existing.totalCostUSD != null) {
+          existing.totalCostUSD += costUSD;
+        } else if (costUSD != null && existing.totalCostUSD == null && existing.quantity === tx.quantity) {
+          existing.totalCostUSD = costUSD;
+        } else {
+          existing.totalCostUSD = undefined;
         }
       } else {
         positions.set(tx.symbol, {
@@ -45,6 +61,7 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
           quantity: tx.quantity,
           totalCost: cost,
           totalCostKRW: costKRW,
+          totalCostUSD: costUSD,
           currency: tx.currency,
           firstDate: tx.date,
         });
@@ -58,11 +75,18 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
         existing.totalCostKRW != null
           ? existing.totalCostKRW / existing.quantity
           : undefined;
+      const avgCostUSD =
+        existing.totalCostUSD != null
+          ? existing.totalCostUSD / existing.quantity
+          : undefined;
 
       existing.quantity -= tx.quantity;
       existing.totalCost -= avgCost * tx.quantity;
       if (avgCostKRW != null && existing.totalCostKRW != null) {
         existing.totalCostKRW -= avgCostKRW * tx.quantity;
+      }
+      if (avgCostUSD != null && existing.totalCostUSD != null) {
+        existing.totalCostUSD -= avgCostUSD * tx.quantity;
       }
 
       if (existing.quantity < 1e-8) {
@@ -79,6 +103,7 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
     avgCost: p.quantity > 0 ? p.totalCost / p.quantity : 0,
     currency: p.currency,
     costBasisKRW: p.totalCostKRW,
+    costBasisUSD: p.totalCostUSD,
     addedAt: p.firstDate,
   }));
 }
