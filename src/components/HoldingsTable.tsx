@@ -55,6 +55,8 @@ export function HoldingsTable({
               const currency = h.quote?.currency ?? h.currency ?? "USD";
               const nativeCurrency = normalizeCurrency(currency);
               const showNativeSecondary = nativeCurrency !== displayCurrency;
+              const displayPrice =
+                h.quantity > 0 ? h.displayMarketValue / h.quantity : 0;
 
               return (
                 <tr
@@ -81,6 +83,11 @@ export function HoldingsTable({
                         <span className="text-white">
                           {formatCurrency(h.quote.price, currency)}
                         </span>
+                        {showNativeSecondary && (
+                          <span className="text-xs text-slate-500">
+                            {formatCurrency(displayPrice, displayCurrency)} /주
+                          </span>
+                        )}
                         <PriceChange
                           value={h.quote.change}
                           percent={h.quote.changePercent}
