@@ -11,23 +11,24 @@ interface PortfolioSummaryCardsProps {
 }
 
 export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCardsProps) {
+  const baseCurrency = summary?.baseCurrency ?? "KRW";
   const cards = [
     {
-      label: "총 평가액",
-      value: summary ? formatCurrency(summary.totalValue) : "—",
+      label: "총 평가액 (원화)",
+      value: summary ? formatCurrency(summary.totalValue, baseCurrency) : "—",
       icon: Wallet,
       color: "text-blue-400",
       bg: "bg-blue-500/10",
     },
     {
-      label: "총 매입금액",
-      value: summary ? formatCurrency(summary.totalCost) : "—",
+      label: "총 매입금액 (원화)",
+      value: summary ? formatCurrency(summary.totalCost, baseCurrency) : "—",
       icon: DollarSign,
       color: "text-violet-400",
       bg: "bg-violet-500/10",
     },
     {
-      label: "총 손익",
+      label: "총 손익 (원화)",
       value: null,
       icon: TrendingUp,
       color: summary && summary.totalGainLoss >= 0 ? "text-emerald-400" : "text-red-400",
@@ -36,6 +37,7 @@ export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCard
         <PriceChange
           value={summary.totalGainLoss}
           percent={summary.totalGainLossPercent}
+          currency={baseCurrency}
           size="lg"
           showPercent
         />
@@ -44,7 +46,7 @@ export function PortfolioSummaryCards({ summary, loading }: PortfolioSummaryCard
       ),
     },
     {
-      label: "수익률",
+      label: "원화 기준 수익률",
       value: summary ? formatPercent(summary.totalGainLossPercent) : "—",
       icon: PieChart,
       color: summary && summary.totalGainLossPercent >= 0 ? "text-emerald-400" : "text-red-400",
