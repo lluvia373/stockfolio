@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type {
+  DisplayCurrency,
   Holding,
   HoldingWithQuote,
   PortfolioSummary,
@@ -18,10 +19,17 @@ import type {
 } from "@/lib/types";
 import { deriveHoldings, validateSell } from "@/lib/portfolio";
 import { getFxRateToKRW, getQuote } from "@/lib/stock-api";
-import { BASE_CURRENCY, normalizeCurrency, toKRW } from "@/lib/currency";
+import {
+  BASE_CURRENCY,
+  DEFAULT_DISPLAY_CURRENCY,
+  krwToDisplayCurrency,
+  normalizeCurrency,
+  toKRW,
+} from "@/lib/currency";
 
 const TRANSACTIONS_KEY = "stock-transactions";
 const LEGACY_HOLDINGS_KEY = "stock-portfolio";
+const DISPLAY_CURRENCY_KEY = "stock-display-currency";
 
 interface AddTransactionInput {
   symbol: string;
@@ -33,6 +41,7 @@ interface AddTransactionInput {
   fee?: number;
   currency: string;
   fxRateToKRW: number;
+  usdKrwRateAtTransaction: number;
 }
 
 interface PortfolioContextValue {
@@ -40,6 +49,8 @@ interface PortfolioContextValue {
   holdings: Holding[];
   summary: PortfolioSummary | null;
   loading: boolean;
+  displayCurrency: DisplayCurrency;
+  setDisplayCurrency: (currency: DisplayCurrency) => void;
   addTransaction: (input: AddTransactionInput) => string | null;
   removeTransaction: (id: string) => void;
   refreshQuotes: () => Promise<void>;
@@ -107,12 +118,21 @@ async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Tran
 
   return Promise.all(
     transactions.map(async (tx) => {
-      if (tx.currency && tx.fxRateToKRW != null) return tx;
+      if (
+        tx.currency &&
+        tx.fxRateToKRW != null &&
+        tx.usdKrwRateAtTransaction != null
+      ) {
+        return tx;
+      }
 
       try {
         const currency = tx.currency ?? (await getCurrency(tx.symbol));
-        const fxRateToKRW = tx.fxRateToKRW ?? (await getHistoricalFx(currency, tx.date));
-        return { ...tx, currency, fxRateToKRW };
+        const [fxRateToKRW, usdKrwRateAtTransaction] = await Promise.all([
+          tx.fxRateToKRW ?? getHistoricalFx(currency, tx.date),
+          tx.usdKrwRateAtTransaction ?? getHistoricalFx("USD", tx.date),
+        ]);
+        return { ...tx, currency, fxRateToKRW, usdKrwRateAtTransaction };
       } catch {
         return tx;
       }
@@ -123,8 +143,11 @@ async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Tran
 function buildSummary(
   holdings: Holding[],
   quotes: Record<string, StockQuote>,
-  fxRatesToKRW: Record<string, number>
+  fxRatesToKRW: Record<string, number>,
+  displayCurrency: DisplayCurrency
 ): PortfolioSummary {
+  const currentUsdKrwRate = fxRatesToKRW.USD ?? 0;
+
   const enriched: HoldingWithQuote[] = holdings.map((h) => {
     const quote = quotes[h.symbol];
     const currency = quote?.currency ?? h.currency ?? "USD";
@@ -146,6 +169,27 @@ function buildSummary(
     const gainLossPercentKRW =
       resolvedCostBasisKRW > 0 ? (gainLossKRW / resolvedCostBasisKRW) * 100 : 0;
 
+    const marketValueUSD = krwToDisplayCurrency(
+      marketValueKRW,
+      "USD",
+      currentUsdKrwRate
+    );
+    const resolvedCostBasisUSD =
+      h.costBasisUSD ??
+      krwToDisplayCurrency(resolvedCostBasisKRW, "USD", currentUsdKrwRate);
+    const gainLossUSD = marketValueUSD - resolvedCostBasisUSD;
+    const gainLossPercentUSD =
+      resolvedCostBasisUSD > 0 ? (gainLossUSD / resolvedCostBasisUSD) * 100 : 0;
+
+    const displayMarketValue =
+      displayCurrency === "KRW" ? marketValueKRW : marketValueUSD;
+    const displayCostBasis =
+      displayCurrency === "KRW" ? resolvedCostBasisKRW : resolvedCostBasisUSD;
+    const displayGainLoss =
+      displayCurrency === "KRW" ? gainLossKRW : gainLossUSD;
+    const displayGainLossPercent =
+      displayCurrency === "KRW" ? gainLossPercentKRW : gainLossPercentUSD;
+
     return {
       ...h,
       currency,
@@ -158,16 +202,24 @@ function buildSummary(
       resolvedCostBasisKRW,
       gainLossKRW,
       gainLossPercentKRW,
+      marketValueUSD,
+      resolvedCostBasisUSD,
+      gainLossUSD,
+      gainLossPercentUSD,
+      displayMarketValue,
+      displayCostBasis,
+      displayGainLoss,
+      displayGainLossPercent,
     };
   });
 
-  const totalValue = enriched.reduce((s, h) => s + h.marketValueKRW, 0);
-  const totalCost = enriched.reduce((s, h) => s + h.resolvedCostBasisKRW, 0);
+  const totalValue = enriched.reduce((s, h) => s + h.displayMarketValue, 0);
+  const totalCost = enriched.reduce((s, h) => s + h.displayCostBasis, 0);
   const totalGainLoss = totalValue - totalCost;
   const totalGainLossPercent = totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
 
   return {
-    baseCurrency: BASE_CURRENCY,
+    baseCurrency: displayCurrency,
     totalValue,
     totalCost,
     totalGainLoss,
@@ -180,22 +232,37 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
   const [fxRatesToKRW, setFxRatesToKRW] = useState<Record<string, number>>({ KRW: 1 });
+  const [displayCurrency, setDisplayCurrencyState] =
+    useState<DisplayCurrency>(DEFAULT_DISPLAY_CURRENCY);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   const holdings = useMemo(() => deriveHoldings(transactions), [transactions]);
 
   useEffect(() => {
+    const storedDisplayCurrency = localStorage.getItem(DISPLAY_CURRENCY_KEY);
+    if (storedDisplayCurrency === "KRW" || storedDisplayCurrency === "USD") {
+      setDisplayCurrencyState(storedDisplayCurrency);
+    }
+
     const loaded = loadTransactions();
     setTransactions(loaded);
     setHydrated(true);
 
-    if (loaded.some((tx) => !tx.currency || tx.fxRateToKRW == null)) {
+    if (
+      loaded.some(
+        (tx) =>
+          !tx.currency ||
+          tx.fxRateToKRW == null ||
+          tx.usdKrwRateAtTransaction == null
+      )
+    ) {
       enrichLegacyCurrencies(loaded).then((enriched) => {
         const changed = enriched.some(
           (tx, i) =>
             tx.currency !== loaded[i]?.currency ||
-            tx.fxRateToKRW !== loaded[i]?.fxRateToKRW
+            tx.fxRateToKRW !== loaded[i]?.fxRateToKRW ||
+            tx.usdKrwRateAtTransaction !== loaded[i]?.usdKrwRateAtTransaction
         );
         if (changed) setTransactions(enriched);
       });
@@ -205,6 +272,11 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated) saveTransactions(transactions);
   }, [transactions, hydrated]);
+
+  const setDisplayCurrency = useCallback((currency: DisplayCurrency) => {
+    setDisplayCurrencyState(currency);
+    localStorage.setItem(DISPLAY_CURRENCY_KEY, currency);
+  }, []);
 
   const refreshQuotes = useCallback(async () => {
     if (holdings.length === 0) {
@@ -228,11 +300,12 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       setQuotes(newQuotes);
 
       const currencies = Array.from(
-        new Set(
-          Object.values(newQuotes)
+        new Set([
+          "USD",
+          ...Object.values(newQuotes)
             .map((quote) => normalizeCurrency(quote.currency))
-            .filter((currency) => currency !== BASE_CURRENCY)
-        )
+            .filter((currency) => currency !== BASE_CURRENCY),
+        ])
       );
 
       const fxResults = await Promise.allSettled(
@@ -278,6 +351,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         fee,
         currency: input.currency,
         fxRateToKRW: input.fxRateToKRW,
+        usdKrwRateAtTransaction: input.usdKrwRateAtTransaction,
         createdAt: new Date().toISOString(),
       };
 
@@ -294,9 +368,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const summary = useMemo(
     () =>
       holdings.length > 0
-        ? buildSummary(holdings, quotes, fxRatesToKRW)
+        ? buildSummary(holdings, quotes, fxRatesToKRW, displayCurrency)
         : null,
-    [holdings, quotes, fxRatesToKRW]
+    [holdings, quotes, fxRatesToKRW, displayCurrency]
   );
 
   return (
@@ -306,6 +380,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         holdings,
         summary,
         loading,
+        displayCurrency,
+        setDisplayCurrency,
         addTransaction,
         removeTransaction,
         refreshQuotes,
