@@ -9,6 +9,8 @@ export interface Transaction {
   quantity: number;
   price: number;
   fee: number;
+  currency?: string;
+  fxRateToKRW?: number;
   createdAt: string;
 }
 
@@ -18,6 +20,8 @@ export interface Holding {
   name: string;
   quantity: number;
   avgCost: number;
+  currency?: string;
+  costBasisKRW?: number;
   addedAt: string;
 }
 
@@ -64,9 +68,14 @@ export interface HoldingWithQuote extends Holding {
   costBasis: number;
   gainLoss: number;
   gainLossPercent: number;
+  marketValueKRW: number;
+  resolvedCostBasisKRW: number;
+  gainLossKRW: number;
+  gainLossPercentKRW: number;
 }
 
 export interface PortfolioSummary {
+  baseCurrency: "KRW";
   totalValue: number;
   totalCost: number;
   totalGainLoss: number;
