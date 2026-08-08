@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus, Search } from "lucide-react";
-import { searchStocks, getHistoricalDay } from "@/lib/stock-api";
+import { searchStocks, getHistoricalDay, getFxRateToKRW } from "@/lib/stock-api";
 import { formatCurrency, todayISO } from "@/lib/format";
 import type { DayOHLC, StockSearchResult, TransactionType } from "@/lib/types";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -22,6 +22,7 @@ export function TransactionForm() {
   const [txType, setTxType] = useState<TransactionType>("buy");
   const [date, setDate] = useState(todayISO());
   const [ohlc, setOhlc] = useState<DayOHLC | null>(null);
+  const [fxRateToKRW, setFxRateToKRW] = useState<number | null>(null);
   const [ohlcLoading, setOhlcLoading] = useState(false);
   const [ohlcError, setOhlcError] = useState<string | null>(null);
   const [price, setPrice] = useState<number>(0);
@@ -58,23 +59,28 @@ export function TransactionForm() {
   useEffect(() => {
     if (!selected || !date) {
       setOhlc(null);
+      setFxRateToKRW(null);
       return;
     }
 
     let cancelled = false;
     setOhlcLoading(true);
     setOhlcError(null);
+    setFxRateToKRW(null);
 
     getHistoricalDay(selected.symbol, date)
-      .then((data) => {
+      .then(async (data) => {
+        const fxRate = await getFxRateToKRW(data.currency, date);
         if (cancelled) return;
         setOhlc(data);
+        setFxRateToKRW(fxRate);
         setPrice(Math.round(data.close * 100) / 100);
       })
       .catch((err: Error) => {
         if (cancelled) return;
         setOhlc(null);
-        setOhlcError(err.message);
+        setFxRateToKRW(null);
+        setOhlcError(err.message || "거래일 시세 또는 환율을 불러올 수 없습니다.");
       })
       .finally(() => {
         if (!cancelled) setOhlcLoading(false);
@@ -87,7 +93,7 @@ export function TransactionForm() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selected || !ohlc || !quantity || price <= 0) return;
+    if (!selected || !ohlc || fxRateToKRW == null || !quantity || price <= 0) return;
 
     const qty = parseFloat(quantity);
     if (Number.isNaN(qty) || qty <= 0) {
@@ -103,6 +109,8 @@ export function TransactionForm() {
       quantity: qty,
       price,
       fee: fee ? parseFloat(fee) : 0,
+      currency: ohlc.currency,
+      fxRateToKRW,
     });
 
     if (err) {
@@ -228,7 +236,7 @@ export function TransactionForm() {
             {ohlcLoading && (
               <div className="flex items-center justify-center py-8 text-slate-400">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                해당 날짜 시세 조회 중...
+                해당 날짜 시세와 환율 조회 중...
               </div>
             )}
 
@@ -239,7 +247,14 @@ export function TransactionForm() {
             )}
 
             {ohlc && !ohlcLoading && (
-              <PriceRangePicker ohlc={ohlc} price={price} onChange={setPrice} />
+              <>
+                <PriceRangePicker ohlc={ohlc} price={price} onChange={setPrice} />
+                {fxRateToKRW != null && (
+                  <p className="text-xs text-slate-500">
+                    거래 통화 {ohlc.currency} · 원화 환산 {formatCurrency(fxRateToKRW, "KRW")} / 표시 단위
+                  </p>
+                )}
+              </>
             )}
 
             <div className="grid grid-cols-2 gap-3">
@@ -289,7 +304,7 @@ export function TransactionForm() {
 
             <button
               type="submit"
-              disabled={!ohlc || ohlcLoading}
+              disabled={!ohlc || fxRateToKRW == null || ohlcLoading}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-600 py-3 font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />
