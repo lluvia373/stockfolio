@@ -5,7 +5,8 @@
 ## 바로가기
 
 - **GitHub 저장소**: https://github.com/lluvia373/stockfolio
-- **공개 웹 페이지**: 아직 배포 전입니다. Vercel 배포가 완료되면 이곳에 실제 주소를 기록합니다.
+- **공개 웹 페이지**: Vercel에 배포되어 운영 중입니다. 정확한 Production URL은 아래 배포 정보에 기록합니다.
+- **Vercel 배포 페이지**: https://vercel.com/lluvia7531-9475s-projects/stockfolio/8UaWVsUTvNev1uirJDZ6xp8DxqGX
 - **로컬 확인 주소**: http://localhost:3000
 - **기본 브랜치**: `main`
 
@@ -18,32 +19,28 @@
 1. ChatGPT에서 원하는 기능이나 수정 사항을 자연어로 요청합니다.
 2. 필요한 기존 코드를 확인하고 수정합니다.
 3. 변경 내용을 GitHub `main` 브랜치에 반영합니다.
-4. Vercel 배포 연결이 완료된 뒤에는 GitHub 변경 사항이 웹에 배포됩니다.
+4. GitHub에 반영된 변경 사항은 연결된 Vercel 배포를 통해 웹에 반영됩니다.
 5. 공개 웹 주소에서 직접 화면을 확인한 뒤 다음 수정 사항을 이어갑니다.
 
-즉, 앞으로는 **요청 → GitHub 수정 → 웹 배포 → 브라우저 확인 → 추가 수정**의 반복을 기본 개발 방식으로 사용합니다.
+즉, 앞으로는 **요청 → GitHub 수정 → Vercel 배포 → 브라우저 확인 → 추가 수정**의 반복을 기본 개발 방식으로 사용합니다.
 
 ## 배포
 
-배포 플랫폼은 **Vercel**을 사용할 예정입니다.
+배포 플랫폼은 **Vercel**입니다.
 
 현재 상태:
 
 - GitHub 저장소 연결: 완료
-- Vercel 계정 연결: 완료
-- Vercel Stockfolio 프로젝트 생성: 아직 안 됨
-- 공개 Production URL: 아직 없음
-
-Vercel 프로젝트가 생성되면 이 README의 **공개 웹 페이지** 항목에 실제 주소를 추가합니다.
-
-배포 후 목표 흐름:
+- Vercel 배포: 완료
+- GitHub 최신 커밋의 Vercel 배포 상태: 성공
+- Production URL: Vercel에서 실제 접속 중인 주소를 확인해 이 항목에 고정 기록 예정
 
 ```text
 ChatGPT에서 수정 요청
         ↓
 GitHub main 반영
         ↓
-Vercel 자동 배포
+Vercel 배포
         ↓
 공개 웹 페이지에서 확인
 ```
