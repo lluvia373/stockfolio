@@ -20,6 +20,7 @@ import type {
 import { useAuth } from "@/hooks/useAuth";
 import { deriveHoldings, validateSell } from "@/lib/portfolio";
 import { getFxRateToKRW, getQuote } from "@/lib/stock-api";
+import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
   BASE_CURRENCY,
   DEFAULT_DISPLAY_CURRENCY,
@@ -43,6 +44,22 @@ interface AddTransactionInput {
   currency: string;
   fxRateToKRW: number;
   usdKrwRateAtTransaction: number;
+}
+
+interface PortfolioTransactionRow {
+  id: string;
+  user_id: string;
+  symbol: string;
+  name: string;
+  transaction_type: TransactionType;
+  trade_date: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  currency: string | null;
+  fx_rate_to_krw: number | null;
+  usd_krw_rate_at_transaction: number | null;
+  created_at: string;
 }
 
 interface PortfolioContextValue {
@@ -121,6 +138,75 @@ function saveTransactions(
     scopedKey(TRANSACTIONS_KEY, userId),
     JSON.stringify(transactions)
   );
+}
+
+function transactionToRow(userId: string, tx: Transaction) {
+  return {
+    id: tx.id,
+    user_id: userId,
+    symbol: tx.symbol,
+    name: tx.name,
+    transaction_type: tx.type,
+    trade_date: tx.date,
+    quantity: tx.quantity,
+    price: tx.price,
+    fee: tx.fee,
+    currency: tx.currency ?? null,
+    fx_rate_to_krw: tx.fxRateToKRW ?? null,
+    usd_krw_rate_at_transaction: tx.usdKrwRateAtTransaction ?? null,
+    created_at: tx.createdAt,
+  };
+}
+
+function rowToTransaction(row: PortfolioTransactionRow): Transaction {
+  return {
+    id: row.id,
+    symbol: row.symbol,
+    name: row.name,
+    type: row.transaction_type,
+    date: row.trade_date,
+    quantity: Number(row.quantity),
+    price: Number(row.price),
+    fee: Number(row.fee),
+    currency: row.currency ?? undefined,
+    fxRateToKRW:
+      row.fx_rate_to_krw == null ? undefined : Number(row.fx_rate_to_krw),
+    usdKrwRateAtTransaction:
+      row.usd_krw_rate_at_transaction == null
+        ? undefined
+        : Number(row.usd_krw_rate_at_transaction),
+    createdAt: row.created_at,
+  };
+}
+
+async function upsertTransactions(userId: string, transactions: Transaction[]) {
+  if (transactions.length === 0) return;
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return;
+
+  const { error } = await supabase
+    .from("portfolio_transactions")
+    .upsert(transactions.map((tx) => transactionToRow(userId, tx)), {
+      onConflict: "id",
+    });
+
+  if (error) console.error("포트폴리오 서버 저장 실패", error);
+}
+
+async function savePreference(userId: string, currency: DisplayCurrency) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return;
+
+  const { error } = await supabase.from("portfolio_preferences").upsert(
+    {
+      user_id: userId,
+      display_currency: currency,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
+  );
+
+  if (error) console.error("표시 통화 서버 저장 실패", error);
 }
 
 async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Transaction[]> {
@@ -273,51 +359,128 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
   const holdings = useMemo(() => deriveHoldings(transactions), [transactions]);
 
   useEffect(() => {
-    setHydrated(false);
-    setTransactions([]);
-    setQuotes({});
-    setFxRatesToKRW({ KRW: 1 });
+    let cancelled = false;
 
-    const displayKey = scopedKey(DISPLAY_CURRENCY_KEY, storageUserId);
-    let storedDisplayCurrency = localStorage.getItem(displayKey);
+    const hydratePortfolio = async () => {
+      setHydrated(false);
+      setTransactions([]);
+      setQuotes({});
+      setFxRatesToKRW({ KRW: 1 });
 
-    if (!storedDisplayCurrency && storageUserId) {
-      storedDisplayCurrency = localStorage.getItem(DISPLAY_CURRENCY_KEY);
-      if (storedDisplayCurrency) {
-        localStorage.setItem(displayKey, storedDisplayCurrency);
-        localStorage.removeItem(DISPLAY_CURRENCY_KEY);
+      const displayKey = scopedKey(DISPLAY_CURRENCY_KEY, storageUserId);
+      let localDisplayCurrency = localStorage.getItem(displayKey);
+
+      if (!localDisplayCurrency && storageUserId) {
+        localDisplayCurrency = localStorage.getItem(DISPLAY_CURRENCY_KEY);
+        if (localDisplayCurrency) {
+          localStorage.setItem(displayKey, localDisplayCurrency);
+          localStorage.removeItem(DISPLAY_CURRENCY_KEY);
+        }
       }
-    }
 
-    if (storedDisplayCurrency === "KRW" || storedDisplayCurrency === "USD") {
-      setDisplayCurrencyState(storedDisplayCurrency);
-    } else {
-      setDisplayCurrencyState(DEFAULT_DISPLAY_CURRENCY);
-    }
+      const resolvedLocalCurrency: DisplayCurrency =
+        localDisplayCurrency === "USD" ? "USD" : DEFAULT_DISPLAY_CURRENCY;
+      const localTransactions = loadTransactions(storageUserId);
 
-    const loaded = loadTransactions(storageUserId);
-    setTransactions(loaded);
-    setHydrated(true);
+      let loadedTransactions = localTransactions;
+      let loadedDisplayCurrency = resolvedLocalCurrency;
 
-    if (
-      loaded.some(
-        (tx) =>
-          !tx.currency ||
-          tx.fxRateToKRW == null ||
-          tx.usdKrwRateAtTransaction == null
-      )
-    ) {
-      enrichLegacyCurrencies(loaded).then((enriched) => {
+      if (authConfigured && storageUserId) {
+        const supabase = getSupabaseBrowserClient();
+        if (supabase) {
+          const [transactionsResult, preferenceResult] = await Promise.all([
+            supabase
+              .from("portfolio_transactions")
+              .select("*")
+              .order("trade_date", { ascending: true })
+              .order("created_at", { ascending: true }),
+            supabase
+              .from("portfolio_preferences")
+              .select("display_currency")
+              .eq("user_id", storageUserId)
+              .maybeSingle(),
+          ]);
+
+          if (!transactionsResult.error) {
+            const serverTransactions = (
+              (transactionsResult.data ?? []) as PortfolioTransactionRow[]
+            ).map(rowToTransaction);
+
+            if (serverTransactions.length === 0) {
+              loadedTransactions = localTransactions;
+              await upsertTransactions(storageUserId, localTransactions);
+            } else {
+              const merged = new Map(
+                serverTransactions.map((tx) => [tx.id, tx] as const)
+              );
+              for (const tx of localTransactions) {
+                if (!merged.has(tx.id)) merged.set(tx.id, tx);
+              }
+              loadedTransactions = Array.from(merged.values()).sort(
+                (a, b) =>
+                  a.date.localeCompare(b.date) ||
+                  a.createdAt.localeCompare(b.createdAt)
+              );
+
+              if (loadedTransactions.length > serverTransactions.length) {
+                await upsertTransactions(storageUserId, loadedTransactions);
+              }
+            }
+          } else {
+            console.error("포트폴리오 서버 불러오기 실패", transactionsResult.error);
+          }
+
+          if (!preferenceResult.error && preferenceResult.data?.display_currency) {
+            loadedDisplayCurrency =
+              preferenceResult.data.display_currency === "USD" ? "USD" : "KRW";
+          } else if (!preferenceResult.error) {
+            await savePreference(storageUserId, resolvedLocalCurrency);
+          } else {
+            console.error("표시 통화 서버 불러오기 실패", preferenceResult.error);
+          }
+        }
+      }
+
+      if (cancelled) return;
+
+      setDisplayCurrencyState(loadedDisplayCurrency);
+      localStorage.setItem(displayKey, loadedDisplayCurrency);
+      setTransactions(loadedTransactions);
+      saveTransactions(loadedTransactions, storageUserId);
+      setHydrated(true);
+
+      if (
+        loadedTransactions.some(
+          (tx) =>
+            !tx.currency ||
+            tx.fxRateToKRW == null ||
+            tx.usdKrwRateAtTransaction == null
+        )
+      ) {
+        const enriched = await enrichLegacyCurrencies(loadedTransactions);
+        if (cancelled) return;
+
         const changed = enriched.some(
           (tx, i) =>
-            tx.currency !== loaded[i]?.currency ||
-            tx.fxRateToKRW !== loaded[i]?.fxRateToKRW ||
-            tx.usdKrwRateAtTransaction !== loaded[i]?.usdKrwRateAtTransaction
+            tx.currency !== loadedTransactions[i]?.currency ||
+            tx.fxRateToKRW !== loadedTransactions[i]?.fxRateToKRW ||
+            tx.usdKrwRateAtTransaction !==
+              loadedTransactions[i]?.usdKrwRateAtTransaction
         );
-        if (changed) setTransactions(enriched);
-      });
-    }
-  }, [storageUserId]);
+        if (changed) {
+          setTransactions(enriched);
+          saveTransactions(enriched, storageUserId);
+          if (storageUserId) void upsertTransactions(storageUserId, enriched);
+        }
+      }
+    };
+
+    void hydratePortfolio();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authConfigured, storageUserId]);
 
   useEffect(() => {
     if (hydrated) saveTransactions(transactions, storageUserId);
@@ -330,6 +493,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         scopedKey(DISPLAY_CURRENCY_KEY, storageUserId),
         currency
       );
+      if (storageUserId) void savePreference(storageUserId, currency);
     },
     [storageUserId]
   );
@@ -412,14 +576,32 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       };
 
       setTransactions((prev) => [...prev, tx]);
+      if (storageUserId) void upsertTransactions(storageUserId, [tx]);
       return null;
     },
-    [transactions]
+    [transactions, storageUserId]
   );
 
-  const removeTransaction = useCallback((id: string) => {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
-  }, []);
+  const removeTransaction = useCallback(
+    (id: string) => {
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
+
+      if (storageUserId) {
+        const supabase = getSupabaseBrowserClient();
+        if (supabase) {
+          void supabase
+            .from("portfolio_transactions")
+            .delete()
+            .eq("id", id)
+            .eq("user_id", storageUserId)
+            .then(({ error }) => {
+              if (error) console.error("포트폴리오 서버 삭제 실패", error);
+            });
+        }
+      }
+    },
+    [storageUserId]
+  );
 
   const summary = useMemo(
     () =>
