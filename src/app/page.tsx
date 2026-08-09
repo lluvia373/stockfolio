@@ -1,30 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
 import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { HoldingsTable } from "@/components/HoldingsTable";
 import { AllocationChart } from "@/components/AllocationChart";
+import { MarketDataStatus } from "@/components/MarketDataStatus";
 import { usePortfolio } from "@/hooks/usePortfolio";
 
 export default function DashboardPage() {
-  const { summary, loading, refreshQuotes, displayCurrency } = usePortfolio();
+  const {
+    summary,
+    loading,
+    displayCurrency,
+    lastMarketUpdateAt,
+    marketDataError,
+  } = usePortfolio();
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">대시보드</h1>
           <p className="mt-1 text-slate-400">포트폴리오 현황을 한눈에 확인하세요.</p>
         </div>
-        <button
-          onClick={refreshQuotes}
-          disabled={loading}
-          className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-50"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          새로고침
-        </button>
+        <div className="pt-1 text-right">
+          <MarketDataStatus
+            lastUpdatedAt={lastMarketUpdateAt}
+            error={marketDataError}
+            loading={loading}
+          />
+        </div>
       </div>
 
       <PortfolioSummaryCards summary={summary} loading={loading} />
