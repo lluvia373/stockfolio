@@ -18,7 +18,7 @@ import type {
   TransactionType,
 } from "@/lib/types";
 import { useAuth } from "@/hooks/useAuth";
-import { deriveHoldings, validateSell } from "@/lib/portfolio";
+import { deriveHoldings, validateTransactionHistory } from "@/lib/portfolio";
 import { getFxRateToKRW, getQuote } from "@/lib/stock-api";
 import { getSupabaseBrowserClient } from "@/lib/supabase";
 import {
@@ -46,6 +46,14 @@ interface AddTransactionInput {
   usdKrwRateAtTransaction: number;
 }
 
+interface UpdateTransactionInput {
+  type: TransactionType;
+  date: string;
+  quantity: number;
+  price: number;
+  fee?: number;
+}
+
 interface PortfolioTransactionRow {
   id: string;
   user_id: string;
@@ -70,7 +78,12 @@ interface PortfolioContextValue {
   displayCurrency: DisplayCurrency;
   setDisplayCurrency: (currency: DisplayCurrency) => void;
   addTransaction: (input: AddTransactionInput) => string | null;
-  removeTransaction: (id: string) => void;
+  updateTransaction: (
+    id: string,
+    input: UpdateTransactionInput
+  ) => Promise<string | null>;
+  removeTransaction: (id: string) => Promise<string | null>;
+  restoreTransaction: (transaction: Transaction) => Promise<string | null>;
   refreshQuotes: () => Promise<void>;
 }
 
@@ -179,10 +192,13 @@ function rowToTransaction(row: PortfolioTransactionRow): Transaction {
   };
 }
 
-async function upsertTransactions(userId: string, transactions: Transaction[]) {
-  if (transactions.length === 0) return;
+async function upsertTransactions(
+  userId: string,
+  transactions: Transaction[]
+): Promise<string | null> {
+  if (transactions.length === 0) return null;
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return;
+  if (!supabase) return "서버 연결을 찾을 수 없습니다.";
 
   const { error } = await supabase
     .from("portfolio_transactions")
@@ -190,7 +206,31 @@ async function upsertTransactions(userId: string, transactions: Transaction[]) {
       onConflict: "id",
     });
 
-  if (error) console.error("포트폴리오 서버 저장 실패", error);
+  if (error) {
+    console.error("포트폴리오 서버 저장 실패", error);
+    return "서버 저장에 실패했습니다. 잠시 후 다시 시도해주세요.";
+  }
+  return null;
+}
+
+async function deleteTransactionFromServer(
+  userId: string,
+  id: string
+): Promise<string | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return "서버 연결을 찾을 수 없습니다.";
+
+  const { error } = await supabase
+    .from("portfolio_transactions")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (error) {
+    console.error("포트폴리오 서버 삭제 실패", error);
+    return "서버에서 거래를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.";
+  }
+  return null;
 }
 
 async function savePreference(userId: string, currency: DisplayCurrency) {
@@ -555,11 +595,6 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       const upper = input.symbol.toUpperCase();
       const fee = input.fee ?? 0;
 
-      if (input.type === "sell") {
-        const error = validateSell(transactions, upper, input.quantity);
-        if (error) return error;
-      }
-
       const tx: Transaction = {
         id: crypto.randomUUID(),
         symbol: upper,
@@ -575,6 +610,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
       };
 
+      const historyError = validateTransactionHistory([...transactions, tx]);
+      if (historyError) return historyError;
+
       setTransactions((prev) => [...prev, tx]);
       if (storageUserId) void upsertTransactions(storageUserId, [tx]);
       return null;
@@ -582,25 +620,110 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     [transactions, storageUserId]
   );
 
-  const removeTransaction = useCallback(
-    (id: string) => {
-      setTransactions((prev) => prev.filter((t) => t.id !== id));
+  const updateTransaction = useCallback(
+    async (id: string, input: UpdateTransactionInput): Promise<string | null> => {
+      const original = transactions.find((tx) => tx.id === id);
+      if (!original) return "수정할 거래를 찾지 못했습니다.";
 
-      if (storageUserId) {
-        const supabase = getSupabaseBrowserClient();
-        if (supabase) {
-          void supabase
-            .from("portfolio_transactions")
-            .delete()
-            .eq("id", id)
-            .eq("user_id", storageUserId)
-            .then(({ error }) => {
-              if (error) console.error("포트폴리오 서버 삭제 실패", error);
-            });
+      if (!Number.isFinite(input.quantity) || input.quantity <= 0) {
+        return "수량은 0보다 커야 합니다.";
+      }
+      if (!Number.isFinite(input.price) || input.price <= 0) {
+        return "단가는 0보다 커야 합니다.";
+      }
+      const fee = input.fee ?? 0;
+      if (!Number.isFinite(fee) || fee < 0) {
+        return "수수료는 0 이상이어야 합니다.";
+      }
+
+      let currency = original.currency;
+      let fxRateToKRW = original.fxRateToKRW;
+      let usdKrwRateAtTransaction = original.usdKrwRateAtTransaction;
+
+      if (
+        input.date !== original.date ||
+        !currency ||
+        fxRateToKRW == null ||
+        usdKrwRateAtTransaction == null
+      ) {
+        try {
+          currency = currency ?? (await getQuote(original.symbol)).currency;
+          [fxRateToKRW, usdKrwRateAtTransaction] = await Promise.all([
+            getFxRateToKRW(currency, input.date),
+            getFxRateToKRW("USD", input.date),
+          ]);
+        } catch {
+          return "거래일 환율을 불러오지 못해 수정하지 않았습니다.";
         }
       }
+
+      const updated: Transaction = {
+        ...original,
+        type: input.type,
+        date: input.date,
+        quantity: input.quantity,
+        price: input.price,
+        fee,
+        currency,
+        fxRateToKRW,
+        usdKrwRateAtTransaction,
+      };
+      const nextTransactions = transactions.map((tx) =>
+        tx.id === id ? updated : tx
+      );
+      const historyError = validateTransactionHistory(nextTransactions);
+      if (historyError) return historyError;
+
+      if (storageUserId) {
+        const serverError = await upsertTransactions(storageUserId, [updated]);
+        if (serverError) return serverError;
+      }
+
+      setTransactions(nextTransactions);
+      return null;
     },
-    [storageUserId]
+    [transactions, storageUserId]
+  );
+
+  const removeTransaction = useCallback(
+    async (id: string): Promise<string | null> => {
+      const original = transactions.find((tx) => tx.id === id);
+      if (!original) return "삭제할 거래를 찾지 못했습니다.";
+
+      const nextTransactions = transactions.filter((tx) => tx.id !== id);
+      const historyError = validateTransactionHistory(nextTransactions);
+      if (historyError) {
+        return `이 거래를 삭제하면 거래 기록이 모순됩니다. ${historyError}`;
+      }
+
+      if (storageUserId) {
+        const serverError = await deleteTransactionFromServer(storageUserId, id);
+        if (serverError) return serverError;
+      }
+
+      setTransactions(nextTransactions);
+      return null;
+    },
+    [transactions, storageUserId]
+  );
+
+  const restoreTransaction = useCallback(
+    async (transaction: Transaction): Promise<string | null> => {
+      if (transactions.some((tx) => tx.id === transaction.id)) return null;
+
+      const nextTransactions = [...transactions, transaction];
+      const historyError = validateTransactionHistory(nextTransactions);
+      if (historyError) return historyError;
+
+      if (storageUserId) {
+        const serverError = await upsertTransactions(storageUserId, [transaction]);
+        if (serverError) return serverError;
+      }
+
+      setTransactions(nextTransactions);
+      return null;
+    },
+    [transactions, storageUserId]
   );
 
   const summary = useMemo(
@@ -621,7 +744,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         displayCurrency,
         setDisplayCurrency,
         addTransaction,
+        updateTransaction,
         removeTransaction,
+        restoreTransaction,
         refreshQuotes,
       }}
     >
