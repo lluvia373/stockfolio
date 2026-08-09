@@ -54,6 +54,36 @@ export interface StockSearchResult {
 export interface ChartPoint {
   date: string;
   close: number;
+  adjustedClose?: number;
+}
+
+export type DividendDataStatus =
+  | "confirmed_amount"
+  | "confirmed_zero"
+  | "unavailable";
+
+export interface DividendEvent {
+  date: string;
+  amount: number;
+}
+
+export interface ChartSeries {
+  symbol: string;
+  points: ChartPoint[];
+  dividendStatus: DividendDataStatus;
+  dividends: DividendEvent[];
+}
+
+export interface PortfolioPerformancePoint {
+  date: string;
+  cutoffAt: string;
+  assetValueKRW: number;
+  twrIndex: number;
+  netFlowKRW: number;
+  cumulativeNetFlowKRW: number;
+  cumulativeProfitKRW: number;
+  active: boolean;
+  final: boolean;
 }
 
 export interface DayOHLC {

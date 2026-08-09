@@ -1,4 +1,10 @@
-import type { ChartPoint, DayOHLC, StockQuote, StockSearchResult } from "./types";
+import type {
+  ChartPoint,
+  ChartSeries,
+  DayOHLC,
+  StockQuote,
+  StockSearchResult,
+} from "./types";
 import { BASE_CURRENCY, normalizeCurrency } from "./currency";
 
 export async function searchStocks(query: string): Promise<StockSearchResult[]> {
@@ -16,6 +22,19 @@ export async function getQuote(symbol: string): Promise<StockQuote> {
 export async function getChart(symbol: string, range = "6mo"): Promise<ChartPoint[]> {
   const res = await fetch(
     `/api/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}`
+  );
+  if (!res.ok) throw new Error("차트 데이터 조회에 실패했습니다.");
+  return res.json();
+}
+
+export async function getChartSeries(
+  symbol: string,
+  start: string,
+  end: string
+): Promise<ChartSeries> {
+  const params = new URLSearchParams({ start, end, detailed: "true" });
+  const res = await fetch(
+    `/api/chart/${encodeURIComponent(symbol)}?${params.toString()}`
   );
   if (!res.ok) throw new Error("차트 데이터 조회에 실패했습니다.");
   return res.json();
