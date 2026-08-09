@@ -5,7 +5,6 @@ import { BellRing, ChevronRight, MessageCircleMore, Scale, Sparkles } from "luci
 import { AllocationChart } from "@/components/AllocationChart";
 import { DashboardOverview } from "@/components/DashboardOverview";
 import { HoldingsTable } from "@/components/HoldingsTable";
-import { InteractionStyleSampler } from "@/components/InteractionStyleSampler";
 import { MarketDataStatus } from "@/components/MarketDataStatus";
 import { usePortfolio } from "@/hooks/usePortfolio";
 
@@ -98,7 +97,6 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <InteractionStyleSampler />
     </div>
   );
 }

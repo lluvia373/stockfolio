@@ -26,50 +26,6 @@ body {
   color: white;
 }
 
-@keyframes premium-aurora-drift {
-  0%, 100% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(16deg) scale(1.08); }
-}
-
-@keyframes premium-shine-pass {
-  0%, 35% { transform: translateX(-130%) skewX(-18deg); }
-  70%, 100% { transform: translateX(170%) skewX(-18deg); }
-}
-
-@keyframes premium-particle-pop {
-  0% { opacity: 0; transform: scale(0) translateY(8px); }
-  35% { opacity: 1; transform: scale(1.2) translateY(-4px); }
-  100% { opacity: 0; transform: scale(0.4) translateY(-22px); }
-}
-
-.premium-aurora {
-  background: conic-gradient(from 90deg, #22d3ee, #6366f1, #c026d3, #22d3ee);
-  filter: blur(72px);
-  animation: premium-aurora-drift 7s ease-in-out infinite;
-}
-
-.premium-shine {
-  width: 38%;
-  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.11), transparent);
-  animation: premium-shine-pass 4.8s ease-in-out infinite;
-}
-
-.premium-particle {
-  animation: premium-particle-pop 900ms ease-out both;
-}
-
-.premium-maximal-card:hover .premium-aurora {
-  animation-duration: 4.5s;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .premium-aurora,
-  .premium-shine,
-  .premium-particle {
-    animation: none;
-  }
-}
-
 * {
   scrollbar-width: thin;
   scrollbar-color: #334155 transparent;
