@@ -1,6 +1,45 @@
 import type { Holding, Transaction } from "./types";
 import { toKRW } from "./currency";
 
+const QUANTITY_EPSILON = 1e-8;
+
+export function validateTransactionHistory(
+  transactions: Transaction[]
+): string | null {
+  const sorted = [...transactions].sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+  );
+  const quantities = new Map<string, number>();
+
+  for (const tx of sorted) {
+    if (!Number.isFinite(tx.quantity) || tx.quantity <= 0) {
+      return `${tx.symbol} 거래 수량은 0보다 커야 합니다.`;
+    }
+    if (!Number.isFinite(tx.price) || tx.price <= 0) {
+      return `${tx.symbol} 거래 단가는 0보다 커야 합니다.`;
+    }
+    if (!Number.isFinite(tx.fee) || tx.fee < 0) {
+      return `${tx.symbol} 수수료는 0 이상이어야 합니다.`;
+    }
+
+    const available = quantities.get(tx.symbol) ?? 0;
+    if (tx.type === "buy") {
+      quantities.set(tx.symbol, available + tx.quantity);
+      continue;
+    }
+
+    if (tx.quantity > available + QUANTITY_EPSILON) {
+      return `${tx.date} ${tx.symbol} 매도 수량(${tx.quantity})이 당시 보유 수량(${available})을 초과합니다.`;
+    }
+
+    const next = available - tx.quantity;
+    quantities.set(tx.symbol, Math.abs(next) < QUANTITY_EPSILON ? 0 : next);
+  }
+
+  return null;
+}
+
 export function deriveHoldings(transactions: Transaction[]): Holding[] {
   const sorted = [...transactions].sort(
     (a, b) =>
@@ -89,7 +128,7 @@ export function deriveHoldings(transactions: Transaction[]): Holding[] {
         existing.totalCostUSD -= avgCostUSD * tx.quantity;
       }
 
-      if (existing.quantity < 1e-8) {
+      if (existing.quantity < QUANTITY_EPSILON) {
         positions.delete(tx.symbol);
       }
     }
