@@ -41,9 +41,11 @@ export function Header() {
         </Link>
 
         <div className="flex items-center gap-2">
+          <div className="hidden text-xs text-slate-500 lg:block">표시 통화</div>
           <div
             className="flex rounded-lg border border-slate-700 bg-slate-900 p-0.5"
-            aria-label="포트폴리오 표시 통화"
+            aria-label="자산 표시 통화"
+            title="포트폴리오 자산을 어떤 통화 기준으로 볼지 선택합니다. 환차손익 분석과는 별개입니다."
           >
             {currencyOptions.map((option) => (
               <button
@@ -56,7 +58,11 @@ export function Header() {
                     ? "bg-emerald-600 text-white"
                     : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 )}
-                title={option.value === "KRW" ? "원화로 보기" : "달러로 보기"}
+                title={
+                  option.value === "KRW"
+                    ? "자산을 원화 기준으로 보기"
+                    : "자산을 달러 기준으로 보기"
+                }
                 aria-pressed={displayCurrency === option.value}
               >
                 {option.label}
