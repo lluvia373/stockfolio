@@ -83,10 +83,21 @@ export interface HoldingWithQuote extends Holding {
   displayCostBasis: number;
   displayGainLoss: number;
   displayGainLossPercent: number;
+  acquisitionFxRateToKRW?: number;
+  currentFxRateToKRW?: number;
+  stockPriceImpactKRW: number;
+  fxImpactKRW: number;
 }
 
 export interface PortfolioSummary {
   baseCurrency: DisplayCurrency;
+  totalAssets: number;
+  investmentAssets: number;
+  cashAssets: number;
+  investmentGainLoss: number;
+  investmentGainLossPercent: number;
+  stockPriceImpactKRW: number;
+  fxImpactKRW: number;
   totalValue: number;
   totalCost: number;
   totalGainLoss: number;

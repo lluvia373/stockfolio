@@ -44,7 +44,7 @@ export function MarketDataStatus({
 
   return (
     <p className="text-xs text-slate-500" title="화면을 보고 있을 때 30초마다 자동 갱신됩니다.">
-      마지막 업데이트 {formatTime(lastUpdatedAt)} · 30초 자동
+      {formatTime(lastUpdatedAt)} 기준
     </p>
   );
 }

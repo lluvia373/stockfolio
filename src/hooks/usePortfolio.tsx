@@ -331,6 +331,24 @@ function buildSummary(
     const gainLossPercentKRW =
       resolvedCostBasisKRW > 0 ? (gainLossKRW / resolvedCostBasisKRW) * 100 : 0;
 
+    const nativeCostBasisKRWAtUnitRate = toKRW(costBasis, currency, 1);
+    const acquisitionFxRateToKRW =
+      normalizedCurrency !== BASE_CURRENCY && nativeCostBasisKRWAtUnitRate > 0
+        ? resolvedCostBasisKRW / nativeCostBasisKRWAtUnitRate
+        : undefined;
+    const currentFxRateToKRW =
+      normalizedCurrency !== BASE_CURRENCY ? fxRate : undefined;
+    const marketValueAtAcquisitionFxKRW =
+      acquisitionFxRateToKRW != null
+        ? toKRW(marketValue, currency, acquisitionFxRateToKRW)
+        : marketValueKRW;
+    const stockPriceImpactKRW =
+      marketValueAtAcquisitionFxKRW - resolvedCostBasisKRW;
+    const fxImpactKRW =
+      normalizedCurrency === BASE_CURRENCY
+        ? 0
+        : marketValueKRW - marketValueAtAcquisitionFxKRW;
+
     const marketValueUSD = krwToDisplayCurrency(
       marketValueKRW,
       "USD",
@@ -372,6 +390,10 @@ function buildSummary(
       displayCostBasis,
       displayGainLoss,
       displayGainLossPercent,
+      acquisitionFxRateToKRW,
+      currentFxRateToKRW,
+      stockPriceImpactKRW,
+      fxImpactKRW,
     };
   });
 
@@ -380,9 +402,24 @@ function buildSummary(
   const totalGainLoss = totalValue - totalCost;
   const totalGainLossPercent =
     totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
+  const stockPriceImpactKRW = enriched.reduce(
+    (sum, holding) => sum + holding.stockPriceImpactKRW,
+    0
+  );
+  const fxImpactKRW = enriched.reduce(
+    (sum, holding) => sum + holding.fxImpactKRW,
+    0
+  );
 
   return {
     baseCurrency: displayCurrency,
+    totalAssets: totalValue,
+    investmentAssets: totalValue,
+    cashAssets: 0,
+    investmentGainLoss: totalGainLoss,
+    investmentGainLossPercent: totalGainLossPercent,
+    stockPriceImpactKRW,
+    fxImpactKRW,
     totalValue,
     totalCost,
     totalGainLoss,

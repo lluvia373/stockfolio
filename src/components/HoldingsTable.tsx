@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
+import { Info, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { normalizeCurrency } from "@/lib/currency";
 import { PriceChange } from "@/components/PriceChange";
@@ -115,12 +115,31 @@ export function HoldingsTable({
                     {loading ? (
                       <span className="text-slate-600">—</span>
                     ) : (
-                      <PriceChange
-                        value={h.displayGainLoss}
-                        percent={h.displayGainLossPercent}
-                        currency={displayCurrency}
-                        size="sm"
-                      />
+                      <div className="flex flex-col items-end">
+                        <PriceChange
+                          value={h.displayGainLoss}
+                          percent={h.displayGainLossPercent}
+                          currency={displayCurrency}
+                          size="sm"
+                        />
+                        {nativeCurrency !== "KRW" ? (
+                          <div className="mt-2 flex flex-col items-end gap-1 border-t border-slate-800/70 pt-2 text-xs">
+                            <span className="text-slate-500">
+                              주가 영향 {formatCurrency(h.stockPriceImpactKRW, "KRW")}
+                            </span>
+                            <span className="flex items-center gap-1 text-slate-500">
+                              환율 영향 {formatCurrency(h.fxImpactKRW, "KRW")}
+                              <span
+                                className="inline-flex cursor-help"
+                                title={`취득 가중평균 환율 ${formatCurrency(h.acquisitionFxRateToKRW ?? 0, "KRW")} → 현재 ${formatCurrency(h.currentFxRateToKRW ?? 0, "KRW")}`}
+                                aria-label={`취득 가중평균 환율 ${h.acquisitionFxRateToKRW?.toFixed(2) ?? "확인 불가"}원, 현재 환율 ${h.currentFxRateToKRW?.toFixed(2) ?? "확인 불가"}원`}
+                              >
+                                <Info className="h-3 w-3" />
+                              </span>
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </td>
                   {onRemove && (
