@@ -14,29 +14,39 @@
 - [x] KRW / USD 표시 전환
 - [x] 매수 당시 환율 + 현재 환율로 환차손익 계산
 - [x] Vercel 자동 배포
-- [ ] **2. Google 로그인 ← 현재 작업**
-  - [x] Google 로그인 UI / 로그아웃 코드
-  - [x] Google 사용자별 LocalStorage 분리
-  - [x] 기존 브라우저 데이터는 첫 로그인 계정으로 1회 이전
-  - [ ] Supabase 프로젝트 생성
-  - [ ] Google OAuth Client ID/Secret 생성 후 Supabase Google Provider 연결
-  - [ ] Vercel에 `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` 등록
-  - [ ] 실제 Google 로그인 Production 확인
-- [ ] 3. 데이터 백업·복구
-- [ ] 4. 거래 수정 / 삭제 확인 / 되돌리기
-- [ ] 5. 로그인 사용자 데이터를 서버 DB로 이전 + 기기간 동기화
+- [x] **2. Google 로그인**
+  - Google 로그인 / 로그아웃
+  - Supabase Google Provider 연결
+  - Vercel 환경변수 연결
+  - Production 실제 로그인 확인
+- [x] **3. 사용자별 서버 저장 + 기기간 동기화 기반**
+  - Supabase에 거래 원본 저장
+  - Google 사용자별 데이터 분리
+  - RLS로 자기 데이터만 읽기/쓰기 허용
+  - 기존 LocalStorage 거래를 첫 서버 연결 때 자동 이전
+  - LocalStorage는 보조 사본으로 유지
+- [x] **4. 거래 수정 / 삭제 확인 / 되돌리기**
+  - 거래일·매수/매도·수량·단가·수수료 수정
+  - 거래일 변경 시 과거 환율 다시 계산
+  - 삭제 전 확인
+  - 삭제 후 8초 되돌리기
+  - 수정/삭제 시 과거 거래 순서가 모순되지 않는지 검사
+- [ ] **5. 데이터 백업·복구 ← 다음 작업**
+  - 전체 거래 JSON 내보내기
+  - JSON 가져오기 및 유효성 검사
 - [ ] 6. 대시보드 / 포트폴리오 화면 역할 정리
 - [ ] 7. 시세 조회 실패 / 마지막 갱신 시각 표시
 - [ ] 8. 거래 페이지 이름·경로 정리
 - [ ] 9. 모바일 UI 최적화
 - [ ] 10. iOS / Android 앱 제작 및 스토어 출시
 
-## 로그인 방향
+## 로그인과 데이터 저장
 
 - 웹은 **Google 로그인 하나로 시작**한다.
 - 별도 Stockfolio 아이디/비밀번호는 만들지 않는다.
-- 현재는 로그인한 Google 사용자마다 브라우저 저장공간을 분리한다.
-- 이후 서버 DB를 붙이면 같은 Google 계정으로 PC/아이폰/안드로이드에서 같은 포트폴리오를 보게 한다.
+- 거래 데이터의 원본은 **Supabase 서버 DB**다.
+- LocalStorage는 네트워크 문제 등에 대비한 브라우저 보조 사본으로 유지한다.
+- 같은 Google 계정으로 로그인하면 PC/다른 기기에서도 같은 포트폴리오를 불러오는 구조다.
 - iOS App Store 출시 시 Google 같은 소셜 로그인을 주 계정 로그인으로 쓰면 Apple 심사 규칙상 동등한 개인정보 보호형 로그인 옵션도 필요할 수 있으므로 **출시 단계에서 Sign in with Apple을 추가**한다.
 
 ## 통화 계산 원칙
