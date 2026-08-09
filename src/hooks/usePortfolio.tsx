@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -32,6 +33,7 @@ import {
 const TRANSACTIONS_KEY = "stock-transactions";
 const LEGACY_HOLDINGS_KEY = "stock-portfolio";
 const DISPLAY_CURRENCY_KEY = "stock-display-currency";
+const MARKET_REFRESH_INTERVAL_MS = 30_000;
 
 interface AddTransactionInput {
   symbol: string;
@@ -76,6 +78,8 @@ interface PortfolioContextValue {
   summary: PortfolioSummary | null;
   loading: boolean;
   displayCurrency: DisplayCurrency;
+  lastMarketUpdateAt: number | null;
+  marketDataError: string | null;
   setDisplayCurrency: (currency: DisplayCurrency) => void;
   addTransaction: (input: AddTransactionInput) => string | null;
   updateTransaction: (
@@ -249,7 +253,9 @@ async function savePreference(userId: string, currency: DisplayCurrency) {
   if (error) console.error("표시 통화 서버 저장 실패", error);
 }
 
-async function enrichLegacyCurrencies(transactions: Transaction[]): Promise<Transaction[]> {
+async function enrichLegacyCurrencies(
+  transactions: Transaction[]
+): Promise<Transaction[]> {
   const currencyPromises = new Map<string, Promise<string>>();
   const fxPromises = new Map<string, Promise<number>>();
 
@@ -372,7 +378,8 @@ function buildSummary(
   const totalValue = enriched.reduce((s, h) => s + h.displayMarketValue, 0);
   const totalCost = enriched.reduce((s, h) => s + h.displayCostBasis, 0);
   const totalGainLoss = totalValue - totalCost;
-  const totalGainLossPercent = totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
+  const totalGainLossPercent =
+    totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
 
   return {
     baseCurrency: displayCurrency,
@@ -390,11 +397,17 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [quotes, setQuotes] = useState<Record<string, StockQuote>>({});
-  const [fxRatesToKRW, setFxRatesToKRW] = useState<Record<string, number>>({ KRW: 1 });
+  const [fxRatesToKRW, setFxRatesToKRW] = useState<Record<string, number>>({
+    KRW: 1,
+  });
   const [displayCurrency, setDisplayCurrencyState] =
     useState<DisplayCurrency>(DEFAULT_DISPLAY_CURRENCY);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [lastMarketUpdateAt, setLastMarketUpdateAt] = useState<number | null>(null);
+  const [marketDataError, setMarketDataError] = useState<string | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const hasLoadedMarketDataRef = useRef(false);
 
   const holdings = useMemo(() => deriveHoldings(transactions), [transactions]);
 
@@ -406,6 +419,9 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
       setTransactions([]);
       setQuotes({});
       setFxRatesToKRW({ KRW: 1 });
+      setLastMarketUpdateAt(null);
+      setMarketDataError(null);
+      hasLoadedMarketDataRef.current = false;
 
       const displayKey = scopedKey(DISPLAY_CURRENCY_KEY, storageUserId);
       let localDisplayCurrency = localStorage.getItem(displayKey);
@@ -542,53 +558,133 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     if (holdings.length === 0) {
       setQuotes({});
       setFxRatesToKRW({ KRW: 1 });
+      setLastMarketUpdateAt(null);
+      setMarketDataError(null);
+      hasLoadedMarketDataRef.current = false;
       return;
     }
 
-    setLoading(true);
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+
+    if (!hasLoadedMarketDataRef.current) setLoading(true);
+
     try {
-      const results = await Promise.allSettled(
+      const quoteResults = await Promise.allSettled(
         holdings.map((h) => getQuote(h.symbol))
       );
 
-      const newQuotes: Record<string, StockQuote> = {};
-      results.forEach((result, i) => {
+      const successfulQuotes: Record<string, StockQuote> = {};
+      let quoteFailures = 0;
+      quoteResults.forEach((result, i) => {
         if (result.status === "fulfilled") {
-          newQuotes[holdings[i].symbol] = result.value;
+          successfulQuotes[holdings[i].symbol] = result.value;
+        } else {
+          quoteFailures += 1;
         }
       });
-      setQuotes(newQuotes);
+
+      // 실패한 종목은 기존 정상 시세를 유지하고 성공한 종목만 덮어씁니다.
+      if (Object.keys(successfulQuotes).length > 0) {
+        setQuotes((previous) => ({ ...previous, ...successfulQuotes }));
+      }
 
       const currencies = Array.from(
         new Set([
           "USD",
-          ...Object.values(newQuotes)
-            .map((quote) => normalizeCurrency(quote.currency))
+          ...holdings
+            .map((holding) =>
+              normalizeCurrency(
+                successfulQuotes[holding.symbol]?.currency ??
+                  holding.currency ??
+                  "USD"
+              )
+            )
             .filter((currency) => currency !== BASE_CURRENCY),
         ])
       );
 
       const fxResults = await Promise.allSettled(
-        currencies.map(async (currency) => [currency, await getFxRateToKRW(currency)] as const)
+        currencies.map(async (currency) =>
+          [currency, await getFxRateToKRW(currency)] as const
+        )
       );
-      const nextFxRates: Record<string, number> = { KRW: 1 };
+
+      const successfulFxRates: Record<string, number> = {};
+      let fxFailures = 0;
       fxResults.forEach((result) => {
         if (result.status === "fulfilled") {
           const [currency, rate] = result.value;
-          nextFxRates[currency] = rate;
+          successfulFxRates[currency] = rate;
+        } else {
+          fxFailures += 1;
         }
       });
-      setFxRatesToKRW(nextFxRates);
+
+      // 환율 조회 실패 때도 마지막 정상 환율을 유지합니다.
+      setFxRatesToKRW((previous) => ({
+        ...previous,
+        KRW: 1,
+        ...successfulFxRates,
+      }));
+
+      if (quoteFailures === 0 && fxFailures === 0) {
+        setLastMarketUpdateAt(Date.now());
+        setMarketDataError(null);
+      } else {
+        setMarketDataError("일부 시세 또는 환율을 업데이트하지 못했습니다.");
+      }
+    } catch (error) {
+      console.error("시장 데이터 자동 업데이트 실패", error);
+      setMarketDataError("시세 또는 환율을 업데이트하지 못했습니다.");
     } finally {
+      hasLoadedMarketDataRef.current = true;
+      refreshInFlightRef.current = false;
       setLoading(false);
     }
   }, [holdings]);
 
   useEffect(() => {
-    if (hydrated && holdings.length > 0) {
+    if (!hydrated || holdings.length === 0) return;
+
+    let intervalId: number | null = null;
+
+    const stopInterval = () => {
+      if (intervalId != null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const startInterval = () => {
+      stopInterval();
+      if (document.visibilityState !== "visible") return;
+      intervalId = window.setInterval(() => {
+        void refreshQuotes();
+      }, MARKET_REFRESH_INTERVAL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshQuotes();
+        startInterval();
+      } else {
+        stopInterval();
+      }
+    };
+
+    if (document.visibilityState === "visible") {
       void refreshQuotes();
+      startInterval();
     }
-  }, [hydrated, refreshQuotes, holdings.length]);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopInterval();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [hydrated, holdings.length, refreshQuotes]);
 
   const addTransaction = useCallback(
     (input: AddTransactionInput): string | null => {
@@ -742,6 +838,8 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         summary,
         loading,
         displayCurrency,
+        lastMarketUpdateAt,
+        marketDataError,
         setDisplayCurrency,
         addTransaction,
         updateTransaction,
