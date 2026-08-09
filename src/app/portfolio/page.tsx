@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, RefreshCw, RotateCcw, X } from "lucide-react";
+import { Loader2, RotateCcw, X } from "lucide-react";
 import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { HoldingsTable } from "@/components/HoldingsTable";
 import { TransactionList } from "@/components/TransactionList";
+import { MarketDataStatus } from "@/components/MarketDataStatus";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import type { Transaction } from "@/lib/types";
 
@@ -17,8 +18,9 @@ export default function PortfolioPage() {
     updateTransaction,
     removeTransaction,
     restoreTransaction,
-    refreshQuotes,
     displayCurrency,
+    lastMarketUpdateAt,
+    marketDataError,
   } = usePortfolio();
   const [lastDeleted, setLastDeleted] = useState<Transaction | null>(null);
   const [undoing, setUndoing] = useState(false);
@@ -55,26 +57,23 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">포트폴리오</h1>
           <p className="mt-1 text-slate-400">보유 종목과 거래 내역을 관리하세요.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-end gap-2">
           <Link
             href="/search"
             className="rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800"
           >
             + 거래 추가
           </Link>
-          <button
-            onClick={refreshQuotes}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-slate-800 disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            새로고침
-          </button>
+          <MarketDataStatus
+            lastUpdatedAt={lastMarketUpdateAt}
+            error={marketDataError}
+            loading={loading}
+          />
         </div>
       </div>
 
