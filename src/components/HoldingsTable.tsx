@@ -37,7 +37,47 @@ export function HoldingsTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-900/50">
+    <>
+      <div className="space-y-2 lg:hidden">
+        {holdings.map((holding) => {
+          const currency = holding.quote?.currency ?? holding.currency ?? "USD";
+          const nativeCurrency = normalizeCurrency(currency);
+          return (
+            <Link
+              key={holding.id}
+              href={`/stock/${holding.symbol}`}
+              className="block rounded-2xl border border-white/10 bg-white/[0.025] p-4 transition-colors hover:bg-white/[0.045]"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{holding.symbol}</span>
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-slate-500">{nativeCurrency}</span>
+                  </div>
+                  <p className="mt-1 truncate text-xs text-slate-500">{holding.name}</p>
+                  <p className="mt-3 text-xs text-slate-500">{holding.quantity}주 · 평균 {formatCurrency(holding.avgCost, currency)}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-semibold text-white">{loading ? "—" : formatCurrency(holding.displayMarketValue, displayCurrency)}</p>
+                  {loading ? (
+                    <span className="text-xs text-slate-600">불러오는 중</span>
+                  ) : (
+                    <PriceChange value={holding.displayGainLoss} percent={holding.displayGainLossPercent} currency={displayCurrency} size="sm" />
+                  )}
+                </div>
+              </div>
+              {nativeCurrency !== "KRW" && !loading ? (
+                <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/5 pt-3 text-xs">
+                  <div><span className="text-slate-600">주가 영향</span><p className="mt-1 text-slate-400">{formatCurrency(holding.stockPriceImpactKRW, "KRW")}</p></div>
+                  <div><span className="text-slate-600">환율 영향</span><p className="mt-1 text-slate-400">{formatCurrency(holding.fxImpactKRW, "KRW")}</p></div>
+                </div>
+              ) : null}
+            </Link>
+          );
+        })}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] lg:block">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
@@ -159,6 +199,7 @@ export function HoldingsTable({
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

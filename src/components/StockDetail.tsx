@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Loader2, Plus } from "lucide-react";
+import { BellRing, Loader2, MessageCircleMore, Plus, Sparkles } from "lucide-react";
 import { getQuote } from "@/lib/stock-api";
 import { formatCompactNumber, formatCurrency } from "@/lib/format";
 import { PriceChange } from "@/components/PriceChange";
@@ -72,7 +72,7 @@ export function StockDetail({ symbol }: StockDetailProps) {
         </div>
         <Link
           href="/search"
-          className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white hover:bg-emerald-500"
+          className="flex items-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-slate-200"
         >
           <Plus className="h-4 w-4" />
           거래 기록하기
@@ -83,7 +83,7 @@ export function StockDetail({ symbol }: StockDetailProps) {
         {stats.map((s) => (
           <div
             key={s.label}
-            className="rounded-lg border border-slate-800 bg-slate-900/50 px-4 py-3"
+            className="rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3"
           >
             <p className="text-xs text-slate-500">{s.label}</p>
             <p className="mt-1 font-semibold text-white">{s.value}</p>
@@ -92,6 +92,24 @@ export function StockDetail({ symbol }: StockDetailProps) {
       </div>
 
       <StockChart symbol={symbol} currency={quote.currency} />
+
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.025] p-5">
+          <Sparkles className="h-5 w-5 text-indigo-300" />
+          <h2 className="mt-4 font-semibold text-white">종목 분석</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">밸류에이션, 성장성, 수익성, 배당과 위험 지표를 같은 업종과 비교합니다.</p>
+        </div>
+        <Link href="/watchlist" className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 transition-colors hover:border-indigo-400/30">
+          <BellRing className="h-5 w-5 text-indigo-300" />
+          <h2 className="mt-4 font-semibold text-white">관심종목 뉴스·알림</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">목표 매수가, 가격 변화, 관련 뉴스와 실적 일정을 설정합니다.</p>
+        </Link>
+        <Link href="/community" className="rounded-3xl border border-white/10 bg-white/[0.025] p-5 transition-colors hover:border-indigo-400/30">
+          <MessageCircleMore className="h-5 w-5 text-indigo-300" />
+          <h2 className="mt-4 font-semibold text-white">{quote.symbol} 커뮤니티</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">이 종목을 보는 투자자들의 분석과 질문, 뉴스 해석을 확인합니다.</p>
+        </Link>
+      </div>
     </div>
   );
 }

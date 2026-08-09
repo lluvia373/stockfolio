@@ -24,21 +24,21 @@ export function AllocationChart({ holdings, displayCurrency }: AllocationChartPr
 
   if (data.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center text-slate-500">
+      <div className="flex h-48 items-center justify-center text-sm text-slate-600">
         데이터가 없습니다
       </div>
     );
   }
 
   return (
-    <ResponsiveContainer width="100%" height={280}>
+    <ResponsiveContainer width="100%" height={220}>
       <PieChart>
         <Pie
           data={data}
           cx="50%"
           cy="50%"
-          innerRadius={60}
-          outerRadius={100}
+          innerRadius={52}
+          outerRadius={82}
           paddingAngle={2}
           dataKey="value"
         >

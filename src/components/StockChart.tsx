@@ -45,18 +45,18 @@ export function StockChart({ symbol, currency }: StockChartProps) {
     data.length >= 2 && data[data.length - 1].close >= data[0].close;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="rounded-3xl border border-white/10 bg-[#0d1324]/90 p-4 sm:p-6">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="font-semibold text-white">가격 차트</h3>
-        <div className="flex gap-1">
+        <div className="flex max-w-full gap-1 overflow-x-auto">
           {RANGES.map((r) => (
             <button
               key={r.value}
               onClick={() => setRange(r.value)}
               className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
                 range === r.value
-                  ? "bg-emerald-600 text-white"
-                  : "text-slate-400 hover:bg-slate-800"
+                  ? "bg-white text-slate-950"
+                  : "text-slate-500 hover:bg-white/5 hover:text-white"
               }`}
             >
               {r.label}

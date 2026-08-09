@@ -56,10 +56,11 @@ export default function PortfolioPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">포트폴리오</h1>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-indigo-300">Portfolio</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">포트폴리오</h1>
           <p className="mt-1 text-slate-400">보유 종목과 거래 내역을 관리하세요.</p>
         </div>
         <div className="flex flex-col items-end gap-2">
