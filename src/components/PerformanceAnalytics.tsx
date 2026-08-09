@@ -460,7 +460,7 @@ function ReturnChart({
       <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
         <CartesianGrid vertical={false} stroke="rgba(148,163,184,0.08)" />
         <XAxis dataKey="date" tickFormatter={shortDate} tick={axisTick} axisLine={false} tickLine={false} minTickGap={28} />
-        <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}%`} tick={axisTick} axisLine={false} tickLine={false} width={54} />
+        <YAxis tickFormatter={percentAxis} tick={axisTick} axisLine={false} tickLine={false} width={58} />
         <Tooltip contentStyle={tooltipStyle} labelFormatter={(value) => longDate(String(value ?? ""))} formatter={(value, name) => [formatPercent(Number(value)), name === "portfolioReturn" ? "내 포트폴리오" : benchmarkName ?? "비교 자산"]} />
         {inactivePeriods.map((period) => <ReferenceArea key={`${period.start}-${period.end}`} x1={period.start} x2={period.end} fill="#94a3b8" fillOpacity={0.06} />)}
         <Line type="monotone" dataKey="portfolioReturn" stroke="#818cf8" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
@@ -549,6 +549,12 @@ function compactKRW(value: number): string {
   if (Math.abs(value) >= 100_000_000) return `${(value / 100_000_000).toFixed(1)}억`;
   if (Math.abs(value) >= 10_000) return `${(value / 10_000).toFixed(0)}만`;
   return `${Math.round(value)}`;
+}
+
+function percentAxis(value: number): string {
+  const normalized = Math.abs(value) < 0.005 ? 0 : value;
+  const digits = Math.abs(normalized) < 10 ? 2 : 0;
+  return `${normalized.toFixed(digits)}%`;
 }
 
 const axisTick = { fill: "#64748b", fontSize: 11 };
