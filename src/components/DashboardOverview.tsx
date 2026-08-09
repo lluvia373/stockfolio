@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowRight, ArrowUpRight, CalendarDays, CircleDollarSign } from "lucide-react";
+import { DashboardPerformanceChart } from "@/components/DashboardPerformanceChart";
 import { PriceChange } from "@/components/PriceChange";
 import { formatCurrency } from "@/lib/format";
 import type { DisplayCurrency, PortfolioSummary } from "@/lib/types";
@@ -50,19 +51,13 @@ export function DashboardOverview({
               href="/insights"
               className="group flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-semibold text-slate-300 transition-colors hover:border-indigo-300/30 hover:text-white"
             >
-              기간별 성과 보기
+              상세 분석
               <ArrowRight className="h-3.5 w-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
             </Link>
           </div>
 
-          <div className="relative mt-6 h-24 overflow-hidden rounded-2xl bg-gradient-to-b from-indigo-500/10 to-transparent sm:h-28">
-            <div className="absolute inset-x-4 top-1/3 border-t border-dashed border-indigo-300/15" />
-            <div className="absolute inset-x-4 top-2/3 border-t border-dashed border-indigo-300/10" />
-            <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-              <p className="max-w-md text-xs leading-5 text-slate-500">
-                포트폴리오를 만든 날부터 매일 기록합니다. 기간별 자산·수익률과 원하는 주식·ETF·지수를 분석 화면에서 비교할 수 있습니다.
-              </p>
-            </div>
+          <div className="mt-6 rounded-2xl bg-gradient-to-b from-indigo-500/[0.08] to-transparent p-3 sm:p-4">
+            <DashboardPerformanceChart />
           </div>
         </div>
 
