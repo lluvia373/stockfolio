@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -35,6 +35,11 @@ type RangeKey = (typeof RANGES)[number]["key"];
 export function DashboardPerformanceChart() {
   const { points, trackingStartedAt, loading, error } = usePerformanceHistory();
   const [range, setRange] = useState<RangeKey>("all");
+  const selectedRangeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    selectedRangeRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [range]);
 
   const firstDate = points[0]?.date ?? "";
   const lastDate = points.at(-1)?.date ?? "";
@@ -93,6 +98,7 @@ export function DashboardPerformanceChart() {
           {RANGES.map((item) => (
             <button
               key={item.key}
+              ref={range === item.key ? selectedRangeRef : undefined}
               type="button"
               onClick={() => setRange(item.key)}
               aria-pressed={range === item.key}
