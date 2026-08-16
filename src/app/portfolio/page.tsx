@@ -7,6 +7,7 @@ import { PortfolioSummaryCards } from "@/components/PortfolioSummaryCards";
 import { HoldingsTable } from "@/components/HoldingsTable";
 import { TransactionList } from "@/components/TransactionList";
 import { MarketDataStatus } from "@/components/MarketDataStatus";
+import { TransactionBackupPanel } from "@/components/TransactionBackupPanel";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import type { Transaction } from "@/lib/types";
 
@@ -90,7 +91,12 @@ export default function PortfolioPage() {
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold text-white">거래 내역</h2>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-white">거래 내역</h2>
+        </div>
+        <div className="mb-4">
+          <TransactionBackupPanel />
+        </div>
         <TransactionList
           transactions={transactions}
           onUpdate={updateTransaction}

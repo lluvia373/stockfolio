@@ -56,6 +56,14 @@ interface UpdateTransactionInput {
   fee?: number;
 }
 
+export type TransactionImportMode = "merge" | "replace";
+
+export interface TransactionImportResult {
+  error: string | null;
+  importedCount: number;
+  skippedCount: number;
+}
+
 interface PortfolioTransactionRow {
   id: string;
   user_id: string;
@@ -88,6 +96,10 @@ interface PortfolioContextValue {
   ) => Promise<string | null>;
   removeTransaction: (id: string) => Promise<string | null>;
   restoreTransaction: (transaction: Transaction) => Promise<string | null>;
+  importTransactions: (
+    transactions: Transaction[],
+    mode: TransactionImportMode
+  ) => Promise<TransactionImportResult>;
   refreshQuotes: () => Promise<void>;
 }
 
@@ -233,6 +245,31 @@ async function deleteTransactionFromServer(
   if (error) {
     console.error("포트폴리오 서버 삭제 실패", error);
     return "서버에서 거래를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.";
+  }
+  return null;
+}
+
+async function deleteTransactionsFromServer(
+  userId: string,
+  ids: string[]
+): Promise<string | null> {
+  if (ids.length === 0) return null;
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return "서버 연결을 찾을 수 없습니다.";
+
+  const chunkSize = 200;
+  for (let index = 0; index < ids.length; index += chunkSize) {
+    const chunk = ids.slice(index, index + chunkSize);
+    const { error } = await supabase
+      .from("portfolio_transactions")
+      .delete()
+      .eq("user_id", userId)
+      .in("id", chunk);
+
+    if (error) {
+      console.error("포트폴리오 서버 일괄 삭제 실패", error);
+      return "서버의 기존 거래를 정리하지 못했습니다. 데이터는 교체하지 않았습니다.";
+    }
   }
   return null;
 }
@@ -859,6 +896,71 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
     [transactions, storageUserId]
   );
 
+  const importTransactions = useCallback(
+    async (
+      importedTransactions: Transaction[],
+      mode: TransactionImportMode
+    ): Promise<TransactionImportResult> => {
+      const enrichedImported = await enrichLegacyCurrencies(importedTransactions);
+
+      let nextTransactions: Transaction[];
+      let transactionsToUpsert: Transaction[];
+      let skippedCount = 0;
+
+      if (mode === "merge") {
+        const existingIds = new Set(transactions.map((tx) => tx.id));
+        const newTransactions = enrichedImported.filter((tx) => !existingIds.has(tx.id));
+        skippedCount = enrichedImported.length - newTransactions.length;
+        nextTransactions = [...transactions, ...newTransactions];
+        transactionsToUpsert = newTransactions;
+      } else {
+        nextTransactions = enrichedImported;
+        transactionsToUpsert = enrichedImported;
+      }
+
+      nextTransactions.sort(
+        (a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt)
+      );
+
+      const historyError = validateTransactionHistory(nextTransactions);
+      if (historyError) {
+        return {
+          error: `현재 거래와 함께 적용할 수 없습니다. ${historyError}`,
+          importedCount: 0,
+          skippedCount,
+        };
+      }
+
+      if (storageUserId) {
+        const serverError = await upsertTransactions(storageUserId, transactionsToUpsert);
+        if (serverError) {
+          return { error: serverError, importedCount: 0, skippedCount };
+        }
+
+        if (mode === "replace") {
+          const importedIds = new Set(enrichedImported.map((tx) => tx.id));
+          const removedIds = transactions
+            .filter((tx) => !importedIds.has(tx.id))
+            .map((tx) => tx.id);
+          const deleteError = await deleteTransactionsFromServer(storageUserId, removedIds);
+          if (deleteError) {
+            return { error: deleteError, importedCount: 0, skippedCount };
+          }
+        }
+      }
+
+      setTransactions(nextTransactions);
+      saveTransactions(nextTransactions, storageUserId);
+      return {
+        error: null,
+        importedCount:
+          mode === "merge" ? transactionsToUpsert.length : nextTransactions.length,
+        skippedCount,
+      };
+    },
+    [transactions, storageUserId]
+  );
+
   const summary = useMemo(
     () =>
       holdings.length > 0
@@ -882,6 +984,7 @@ export function PortfolioProvider({ children }: { children: React.ReactNode }) {
         updateTransaction,
         removeTransaction,
         restoreTransaction,
+        importTransactions,
         refreshQuotes,
       }}
     >
